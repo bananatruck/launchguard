@@ -1,14 +1,14 @@
 # LaunchGuard
 
 [![Documentation](https://github.com/bananatruck/launchguard/actions/workflows/docs.yml/badge.svg)](https://github.com/bananatruck/launchguard/actions/workflows/docs.yml)
+[![Rust](https://github.com/bananatruck/launchguard/actions/workflows/rust.yml/badge.svg)](https://github.com/bananatruck/launchguard/actions/workflows/rust.yml)
 
 **A local-first deployment intelligence platform for unfinished software
 projects.**
 
 > [!IMPORTANT]
-> LaunchGuard is currently a pre-implementation specification. The repository
-> defines the product contract and safety boundaries before executable code is
-> introduced.
+> Phase 1 is a read-only detector, not a security scanner or deployment tool.
+> It does not build, test, install, repair, or deploy repository code.
 
 LaunchGuard will inspect a local repository or GitHub URL, determine how the
 project is built, normalize security findings, test it in an isolated
@@ -78,6 +78,37 @@ flowchart LR
 The Rust engine is interface-agnostic. Tauri and the CLI consume the same
 typed events and operations rather than implementing separate workflows.
 
+## Phase 1 quick start
+
+Phase 1 requires Rust 1.97.1. The repository pins the toolchain and commits its
+dependency lockfile.
+
+```bash
+cargo build --locked
+cargo run --locked -- audit ./path/to/project --format json
+cargo run --locked -- audit https://github.com/owner/public-repository
+cargo run --locked -- history
+cargo run --locked -- status <run-id> --format markdown
+cargo run --locked -- schema
+```
+
+The `audit` command:
+
+- Accepts a local directory or root URL for a public GitHub repository.
+- Detects React/Vite, Next.js, FastAPI, and Rust/Axum.
+- Reports competing supported classifications as `needs_confirmation`.
+- Emits evidence-backed `ProjectProfile` v1 records as JSON or Markdown.
+- Records immutable local run history in SQLite unless `--no-history` is used.
+- Writes structured diagnostics to standard error, preserving JSON on standard
+  output.
+
+Set `LAUNCHGUARD_DATABASE` or pass `--database` to choose the history file.
+Only environment variable names are collected; values from `.env` files are
+never read.
+
+See the [Phase 1 implementation guide](docs/PHASE_1.md) for detector contracts,
+limits, architecture, and known limitations.
+
 ## Autonomy boundary
 
 | Operation | Automatic | Approval required |
@@ -114,13 +145,16 @@ The detailed contract is in
 - [Security model](docs/SECURITY_MODEL.md)
 - [System requirements and cost model](docs/SYSTEM_REQUIREMENTS.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Phase 1 implementation](docs/PHASE_1.md)
+- [ProjectProfile v1 JSON Schema](schemas/project-profile-v1.schema.json)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status
 
-The next milestone is a Rust engine and CLI skeleton implementing read-only
-project detection. No current release should be represented as a security
-product or deployment automation tool.
+Phase 1 is implemented and undergoing milestone validation. The checked-in
+synthetic corpus contains 40 supported fixtures and fail-closed ambiguity
+fixtures. Measured results and limitations are published before the roadmap
+phase is marked complete.
 
 ## License
 

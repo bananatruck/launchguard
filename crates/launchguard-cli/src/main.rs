@@ -6,8 +6,8 @@ use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
 use launchguard_core::{
-    DetectionEngine, DetectionStatus, HistoryEntry, HistoryStore, ProjectProfile,
-    RepositoryAcquirer,
+    DetectionEngine, DetectionStatus, HistoryEntry, HistoryStore, PROJECT_PROFILE_SCHEMA_JSON,
+    ProjectProfile, RepositoryAcquirer,
 };
 use serde_json::json;
 use tracing_subscriber::EnvFilter;
@@ -73,6 +73,9 @@ enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Markdown)]
         format: OutputFormat,
     },
+
+    /// Print the bundled `ProjectProfile` JSON Schema.
+    Schema,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -108,6 +111,10 @@ async fn main() -> Result<()> {
             let store = HistoryStore::open(&database_path)?;
             let entries = store.list(usize::from(limit))?;
             print_history(&entries, format)
+        }
+        Command::Schema => {
+            println!("{PROJECT_PROFILE_SCHEMA_JSON}");
+            Ok(())
         }
     }
 }

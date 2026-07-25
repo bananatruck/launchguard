@@ -154,11 +154,14 @@ The Rust engine will serialize public records using versioned JSON schemas.
 ```text
 ProjectProfile
 - schema_version
+- source
 - revision
+- status
 - components[]
 - framework
 - runtime
 - package_manager
+- deployment_kind
 - build_command
 - test_commands[]
 - start_command
@@ -167,6 +170,7 @@ ProjectProfile
 - required_services[]
 - environment_variables[]
 - confidence
+- candidates[]
 - evidence[]
 
 Finding

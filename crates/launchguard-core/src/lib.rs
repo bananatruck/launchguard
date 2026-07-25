@@ -12,5 +12,6 @@ pub use error::{LaunchGuardError, Result};
 pub use history::{HistoryEntry, HistoryStore};
 pub use model::{
     CandidateClassification, Component, DeploymentKind, DetectionStatus, EnvironmentVariable,
-    Evidence, Framework, PROJECT_PROFILE_SCHEMA_VERSION, PackageManager, ProjectProfile, Runtime,
+    Evidence, Framework, PROJECT_PROFILE_SCHEMA_JSON, PROJECT_PROFILE_SCHEMA_VERSION,
+    PackageManager, ProjectProfile, Runtime,
 };

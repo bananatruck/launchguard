@@ -780,6 +780,7 @@ dependencies = [
  "directories",
  "launchguard-core",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 /// The only `ProjectProfile` schema accepted by this release.
 pub const PROJECT_PROFILE_SCHEMA_VERSION: &str = "1.0";
 
+/// Bundled JSON Schema for [`ProjectProfile`].
+pub const PROJECT_PROFILE_SCHEMA_JSON: &str =
+    include_str!("../../../schemas/project-profile-v1.schema.json");
+
 /// Outcome of deterministic framework classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bananatruck/launchguard/schemas/project-profile-v1.schema.json",
+  "title": "LaunchGuard ProjectProfile v1",
+  "description": "Evidence-backed, read-only project classification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "revision",
+    "status",
+    "components",
+    "framework",
+    "runtime",
+    "package_manager",
+    "deployment_kind",
+    "build_command",
+    "test_commands",
+    "start_command",
+    "output_directory",
+    "detected_ports",
+    "required_services",
+    "environment_variables",
+    "confidence",
+    "candidates",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "source": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/detection_status"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    },
+    "framework": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/framework"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runtime": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/runtime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "package_manager": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/package_manager"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "deployment_kind": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/deployment_kind"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "build_command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "test_commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "start_command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output_directory": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "detected_ports": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535
+      }
+    },
+    "required_services": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "environment_variables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/environment_variable"
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    }
+  },
+  "$defs": {
+    "detection_status": {
+      "enum": [
+        "detected",
+        "needs_confirmation",
+        "unsupported"
+      ]
+    },
+    "framework": {
+      "enum": [
+        "react_vite",
+        "next_js",
+        "fast_api",
+        "rust_axum"
+      ]
+    },
+    "runtime": {
+      "enum": [
+        "node_js",
+        "python",
+        "rust"
+      ]
+    },
+    "package_manager": {
+      "enum": [
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "pip",
+        "poetry",
+        "uv",
+        "cargo"
+      ]
+    },
+    "deployment_kind": {
+      "enum": [
+        "static",
+        "server"
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "framework",
+        "deployment_kind"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "framework": {
+          "$ref": "#/$defs/framework"
+        },
+        "deployment_kind": {
+          "$ref": "#/$defs/deployment_kind"
+        }
+      }
+    },
+    "environment_variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "required",
+        "evidence_path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "evidence_path": {
+          "type": "string"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framework",
+        "component_root",
+        "confidence",
+        "evidence"
+      ],
+      "properties": {
+        "framework": {
+          "$ref": "#/$defs/framework"
+        },
+        "component_root": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "description",
+        "weight"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}
