@@ -1,0 +1,383 @@
+{
+  "schema_version": "1.0",
+  "supported": [
+    {
+      "id": "vite-npm-root",
+      "expected": "react_vite",
+      "files": {
+        "package.json": "{\"dependencies\":{\"react\":\"latest\",\"vite\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "package-lock.json": "{}",
+        "src/main.tsx": "console.log(import.meta.env.VITE_API_URL);"
+      }
+    },
+    {
+      "id": "vite-pnpm-nested",
+      "expected": "react_vite",
+      "files": {
+        "web/package.json": "{\"devDependencies\":{\"vite\":\"latest\"},\"dependencies\":{\"react\":\"latest\"},\"scripts\":{\"build\":\"vite build\",\"test\":\"vitest\"}}",
+        "web/pnpm-lock.yaml": "lockfileVersion: '9.0'",
+        "web/vite.config.ts": "export default {};"
+      }
+    },
+    {
+      "id": "vite-yarn-config-evidence",
+      "expected": "react_vite",
+      "files": {
+        "package.json": "{\"dependencies\":{\"react\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "yarn.lock": "",
+        "vite.config.js": "export default {};"
+      }
+    },
+    {
+      "id": "vite-bun-lock",
+      "expected": "react_vite",
+      "files": {
+        "client/package.json": "{\"devDependencies\":{\"vite\":\"latest\"},\"packageManager\":\"bun@1.2.0\",\"scripts\":{\"build\":\"vite build\"}}",
+        "client/bun.lock": "",
+        "client/src/main.ts": "const port = 4173;"
+      }
+    },
+    {
+      "id": "vite-npm-config-ts",
+      "expected": "react_vite",
+      "files": {
+        "package.json": "{\"dependencies\":{\"react\":\"latest\"},\"scripts\":{\"build\":\"vite build\",\"preview\":\"vite preview\"}}",
+        "package-lock.json": "{}",
+        "vite.config.ts": "export default {};"
+      }
+    },
+    {
+      "id": "vite-pnpm-dev-dependency",
+      "expected": "react_vite",
+      "files": {
+        "frontend/package.json": "{\"dependencies\":{\"react\":\"latest\"},\"devDependencies\":{\"vite\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "frontend/pnpm-lock.yaml": "",
+        "frontend/.env.example": "VITE_API_URL=\nPORT=5173\n"
+      }
+    },
+    {
+      "id": "vite-yarn-mjs-config",
+      "expected": "react_vite",
+      "files": {
+        "site/package.json": "{\"dependencies\":{\"react\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "site/yarn.lock": "",
+        "site/vite.config.mjs": "export default {};"
+      }
+    },
+    {
+      "id": "vite-bun-cjs-config",
+      "expected": "react_vite",
+      "files": {
+        "app/package.json": "{\"dependencies\":{\"react\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "app/bun.lockb": "",
+        "app/vite.config.cjs": "module.exports = {};"
+      }
+    },
+    {
+      "id": "vite-package-manager-field",
+      "expected": "react_vite",
+      "files": {
+        "package.json": "{\"packageManager\":\"npm@11.0.0\",\"dependencies\":{\"vite\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "src/index.jsx": "export default function App() {}"
+      }
+    },
+    {
+      "id": "vite-deep-component",
+      "expected": "react_vite",
+      "files": {
+        "apps/docs/package.json": "{\"packageManager\":\"pnpm@10.0.0\",\"devDependencies\":{\"vite\":\"latest\"},\"scripts\":{\"build\":\"vite build\"}}",
+        "apps/docs/vite.config.ts": "export default {};"
+      }
+    },
+    {
+      "id": "next-npm-server",
+      "expected": "next_js",
+      "files": {
+        "package.json": "{\"dependencies\":{\"next\":\"latest\",\"react\":\"latest\"},\"scripts\":{\"build\":\"next build\",\"start\":\"next start\"}}",
+        "package-lock.json": "{}"
+      }
+    },
+    {
+      "id": "next-pnpm-static",
+      "expected": "next_js",
+      "files": {
+        "web/package.json": "{\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\"}}",
+        "web/pnpm-lock.yaml": "",
+        "web/next.config.ts": "export default { output: 'export' };"
+      }
+    },
+    {
+      "id": "next-yarn-server",
+      "expected": "next_js",
+      "files": {
+        "site/package.json": "{\"dependencies\":{\"next\":\"15.0.0\"},\"scripts\":{\"build\":\"next build\",\"start\":\"next start\"}}",
+        "site/yarn.lock": "",
+        "site/next.config.js": "module.exports = {};"
+      }
+    },
+    {
+      "id": "next-bun-static-double-quote",
+      "expected": "next_js",
+      "files": {
+        "package.json": "{\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\"}}",
+        "bun.lock": "",
+        "next.config.mjs": "export default { output: \"export\" };"
+      }
+    },
+    {
+      "id": "next-package-manager-npm",
+      "expected": "next_js",
+      "files": {
+        "dashboard/package.json": "{\"packageManager\":\"npm@11\",\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\"}}",
+        "dashboard/app/page.tsx": "export default function Page() { return null; }"
+      }
+    },
+    {
+      "id": "next-dev-dependency",
+      "expected": "next_js",
+      "files": {
+        "package.json": "{\"devDependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\",\"test\":\"jest\"}}",
+        "pnpm-lock.yaml": ""
+      }
+    },
+    {
+      "id": "next-cjs-static",
+      "expected": "next_js",
+      "files": {
+        "frontend/package.json": "{\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\"}}",
+        "frontend/yarn.lock": "",
+        "frontend/next.config.cjs": "module.exports={output:'export'};"
+      }
+    },
+    {
+      "id": "next-typescript-server",
+      "expected": "next_js",
+      "files": {
+        "apps/portal/package.json": "{\"packageManager\":\"pnpm@10\",\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\",\"start\":\"next start\"}}",
+        "apps/portal/next.config.ts": "export default {};"
+      }
+    },
+    {
+      "id": "next-npm-env",
+      "expected": "next_js",
+      "files": {
+        "package.json": "{\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\"}}",
+        "package-lock.json": "{}",
+        ".env.example": "NEXT_PUBLIC_API_URL=\nPORT=3000\n"
+      }
+    },
+    {
+      "id": "next-bun-server",
+      "expected": "next_js",
+      "files": {
+        "ui/package.json": "{\"packageManager\":\"bun@1.2\",\"dependencies\":{\"next\":\"latest\"},\"scripts\":{\"build\":\"next build\",\"start\":\"next start\"}}",
+        "ui/bun.lock": ""
+      }
+    },
+    {
+      "id": "fastapi-requirements-root",
+      "expected": "fast_api",
+      "files": {
+        "requirements.txt": "fastapi==0.115.0\nuvicorn==0.34.0\n",
+        "main.py": "from fastapi import FastAPI\napp = FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-pyproject-uv",
+      "expected": "fast_api",
+      "files": {
+        "pyproject.toml": "[project]\ndependencies = [\"fastapi>=0.115\", \"uvicorn\"]\n",
+        "uv.lock": "",
+        "app/main.py": "from fastapi import FastAPI\napi = FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-poetry-nested",
+      "expected": "fast_api",
+      "files": {
+        "backend/pyproject.toml": "[tool.poetry.dependencies]\npython = \"^3.12\"\nfastapi = \"^0.115\"\n",
+        "backend/poetry.lock": "",
+        "backend/service.py": "from fastapi import FastAPI\napp = FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-import-module",
+      "expected": "fast_api",
+      "files": {
+        "requirements-prod.txt": "fastapi>=0.110\n",
+        "src/server.py": "import fastapi\napp = fastapi.FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-case-insensitive-dependency",
+      "expected": "fast_api",
+      "files": {
+        "api/requirements.txt": "FastAPI~=0.115\n",
+        "api/main.py": "from fastapi import FastAPI\napplication = FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-optional-dependency",
+      "expected": "fast_api",
+      "files": {
+        "pyproject.toml": "[project.optional-dependencies]\nserver = [\"fastapi\", \"uvicorn\"]\n",
+        "service/api.py": "from fastapi import FastAPI\napp = FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-requirements-dev",
+      "expected": "fast_api",
+      "files": {
+        "services/api/requirements-dev.txt": "fastapi\npytest\n",
+        "services/api/app.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        "services/api/test_app.py": "def test_health(): pass\n"
+      }
+    },
+    {
+      "id": "fastapi-env-observation",
+      "expected": "fast_api",
+      "files": {
+        "requirements.txt": "fastapi\n",
+        "server.py": "from fastapi import FastAPI\nimport os\napp = FastAPI()\nkey = os.getenv('DATABASE_URL')\n",
+        ".env.example": "DATABASE_URL=\nPORT=8000\n"
+      }
+    },
+    {
+      "id": "fastapi-pyproject-inline",
+      "expected": "fast_api",
+      "files": {
+        "service/pyproject.toml": "[project]\ndependencies=[\"fastapi\"]\n",
+        "service/main.py": "from fastapi import FastAPI\napp=FastAPI()\n"
+      }
+    },
+    {
+      "id": "fastapi-multiple-python-files",
+      "expected": "fast_api",
+      "files": {
+        "requirements.txt": "fastapi>=0.100\n",
+        "utilities.py": "print('not imported')\n",
+        "application.py": "from fastapi import FastAPI\napp = FastAPI()\n"
+      }
+    },
+    {
+      "id": "axum-root-locked",
+      "expected": "rust_axum",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"api\"\nversion=\"0.1.0\"\n[dependencies]\naxum=\"0.8\"\n",
+        "Cargo.lock": "",
+        "src/main.rs": "use axum::Router;\nfn main() {}\n"
+      }
+    },
+    {
+      "id": "axum-nested",
+      "expected": "rust_axum",
+      "files": {
+        "server/Cargo.toml": "[package]\nname=\"server\"\nversion=\"0.1.0\"\n[dependencies]\naxum={version=\"0.8\"}\n",
+        "server/src/main.rs": "fn main() {}\n"
+      }
+    },
+    {
+      "id": "axum-target-dependency",
+      "expected": "rust_axum",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"api\"\nversion=\"0.1.0\"\n[target.'cfg(unix)'.dependencies]\naxum=\"0.8\"\n",
+        "src/main.rs": "fn main() {}\n"
+      }
+    },
+    {
+      "id": "axum-workspace-dependency",
+      "expected": "rust_axum",
+      "files": {
+        "Cargo.toml": "[workspace]\nmembers=[]\n[workspace.dependencies]\naxum=\"0.8\"\n"
+      }
+    },
+    {
+      "id": "axum-dev-dependency",
+      "expected": "rust_axum",
+      "files": {
+        "api/Cargo.toml": "[package]\nname=\"api\"\nversion=\"0.1.0\"\n[dev-dependencies]\naxum=\"0.8\"\n",
+        "api/src/lib.rs": "pub fn fixture() {}\n"
+      }
+    },
+    {
+      "id": "axum-inline-table",
+      "expected": "rust_axum",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"edge\"\nversion=\"0.1.0\"\n[dependencies]\naxum={version=\"0.8\",features=[\"macros\"]}\n",
+        ".env.example": "PORT=8080\n"
+      }
+    },
+    {
+      "id": "axum-build-dependency",
+      "expected": "rust_axum",
+      "files": {
+        "tools/api/Cargo.toml": "[package]\nname=\"tools-api\"\nversion=\"0.1.0\"\n[build-dependencies]\naxum=\"0.8\"\n"
+      }
+    },
+    {
+      "id": "axum-with-tokio",
+      "expected": "rust_axum",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"web\"\nversion=\"0.1.0\"\n[dependencies]\naxum=\"0.8\"\ntokio={version=\"1\",features=[\"full\"]}\n",
+        "src/main.rs": "use axum::Router;\n"
+      }
+    },
+    {
+      "id": "axum-rust-env",
+      "expected": "rust_axum",
+      "files": {
+        "backend/Cargo.toml": "[package]\nname=\"backend\"\nversion=\"0.1.0\"\n[dependencies]\naxum=\"0.8\"\n",
+        "backend/src/main.rs": "let port = std::env::var(\"PORT\");\n"
+      }
+    },
+    {
+      "id": "axum-feature-renamed-version",
+      "expected": "rust_axum",
+      "files": {
+        "service/Cargo.toml": "[package]\nname=\"service\"\nversion=\"0.1.0\"\n[dependencies.axum]\nversion=\"0.8\"\nfeatures=[\"http2\"]\n",
+        "service/src/main.rs": "fn main() {}\n"
+      }
+    }
+  ],
+  "safety": [
+    {
+      "id": "ambiguous-vite-and-fastapi",
+      "expected_status": "needs_confirmation",
+      "files": {
+        "frontend/package.json": "{\"dependencies\":{\"vite\":\"latest\",\"react\":\"latest\"}}",
+        "api/requirements.txt": "fastapi\n",
+        "api/main.py": "from fastapi import FastAPI\napp = FastAPI()\n"
+      }
+    },
+    {
+      "id": "unsupported-express",
+      "expected_status": "unsupported",
+      "files": {
+        "package.json": "{\"dependencies\":{\"express\":\"latest\"}}",
+        "server.js": "require('express')();"
+      }
+    },
+    {
+      "id": "incomplete-fastapi-manifest-only",
+      "expected_status": "unsupported",
+      "files": {
+        "requirements.txt": "fastapi\n",
+        "main.py": "print('no framework import')\n"
+      }
+    },
+    {
+      "id": "incomplete-fastapi-import-only",
+      "expected_status": "unsupported",
+      "files": {
+        "main.py": "from fastapi import FastAPI\napp = FastAPI()\n"
+      }
+    },
+    {
+      "id": "incomplete-next-react-only",
+      "expected_status": "unsupported",
+      "files": {
+        "package.json": "{\"dependencies\":{\"react\":\"latest\"}}"
+      }
+    }
+  ]
+}
