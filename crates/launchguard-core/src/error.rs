@@ -17,6 +17,10 @@ pub enum LaunchGuardError {
     #[error("invalid GitHub repository URL: {0}")]
     InvalidGitHubUrl(String),
 
+    /// GitHub returned a revision that was not a complete commit identifier.
+    #[error("GitHub returned an invalid commit revision: {0}")]
+    InvalidRemoteRevision(String),
+
     /// Remote acquisition exceeded a safety limit.
     #[error("repository archive exceeds the {limit_bytes}-byte download limit")]
     ArchiveTooLarge {

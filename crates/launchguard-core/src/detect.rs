@@ -99,7 +99,7 @@ impl DetectionEngine {
         let confidence = candidates
             .iter()
             .map(|candidate| candidate.confidence)
-            .fold(0.0_f32, f32::max);
+            .fold(0.0_f64, f64::max);
 
         let environment_variables = detect_environment_variables(&index);
         let detected_ports = detect_ports(&index);
@@ -303,7 +303,7 @@ struct DetectedCandidate {
     runtime: Runtime,
     package_manager: Option<PackageManager>,
     deployment_kind: DeploymentKind,
-    confidence: f32,
+    confidence: f64,
     evidence: Vec<Evidence>,
     build_command: Option<String>,
     test_commands: Vec<String>,
@@ -322,7 +322,7 @@ impl DetectedCandidate {
     }
 }
 
-fn evidence(kind: &str, path: &str, description: &str, weight: f32) -> Evidence {
+fn evidence(kind: &str, path: &str, description: &str, weight: f64) -> Evidence {
     Evidence {
         kind: kind.to_owned(),
         path: path.to_owned(),
@@ -396,7 +396,7 @@ fn detect_node_projects(index: &RepositoryIndex) -> Vec<DetectedCandidate> {
                 runtime: Runtime::NodeJs,
                 package_manager,
                 deployment_kind: DeploymentKind::Static,
-                confidence: facts.iter().map(|fact| fact.weight).sum::<f32>().min(1.0),
+                confidence: facts.iter().map(|fact| fact.weight).sum::<f64>().min(1.0),
                 evidence: facts,
                 build_command: scripts
                     .is_some_and(|value| value.contains_key("build"))
@@ -695,17 +695,36 @@ fn toml_has_dependency(value: &toml::Value, dependency: &str) -> bool {
     let Some(table) = value.as_table() else {
         return false;
     };
-    table.iter().any(|(key, nested)| {
-        let dependency_section = matches!(
-            key.as_str(),
-            "dependencies" | "dev-dependencies" | "build-dependencies"
-        );
-        (dependency_section
-            && nested
+    if table
+        .get("dependencies")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|dependencies| dependency_table_contains(dependencies, dependency))
+    {
+        return true;
+    }
+
+    table
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|targets| {
+            targets
+                .values()
+                .any(|target| toml_has_dependency(target, dependency))
+        })
+}
+
+fn dependency_table_contains(
+    dependencies: &toml::map::Map<String, toml::Value>,
+    dependency: &str,
+) -> bool {
+    dependencies.contains_key(dependency)
+        || dependencies.values().any(|value| {
+            value
                 .as_table()
-                .is_some_and(|dependencies| dependencies.contains_key(dependency)))
-            || toml_has_dependency(nested, dependency)
-    })
+                .and_then(|configuration| configuration.get("package"))
+                .and_then(toml::Value::as_str)
+                == Some(dependency)
+        })
 }
 
 fn detect_environment_variables(index: &RepositoryIndex) -> Vec<EnvironmentVariable> {
@@ -728,6 +747,9 @@ fn detect_environment_variables(index: &RepositoryIndex) -> Vec<EnvironmentVaria
         if matches!(name, ".env.example" | ".env.sample" | "example.env") {
             for captures in template_pattern.captures_iter(content) {
                 let variable_name = captures[1].to_owned();
+                if !valid_environment_variable_name(&variable_name) {
+                    continue;
+                }
                 variables
                     .entry(variable_name.clone())
                     .or_insert(EnvironmentVariable {
@@ -740,6 +762,9 @@ fn detect_environment_variables(index: &RepositoryIndex) -> Vec<EnvironmentVaria
         for pattern in &source_patterns {
             for captures in pattern.captures_iter(content) {
                 let variable_name = captures[1].to_owned();
+                if !valid_environment_variable_name(&variable_name) {
+                    continue;
+                }
                 variables
                     .entry(variable_name.clone())
                     .or_insert(EnvironmentVariable {
@@ -751,6 +776,10 @@ fn detect_environment_variables(index: &RepositoryIndex) -> Vec<EnvironmentVaria
         }
     }
     variables.into_values().collect()
+}
+
+fn valid_environment_variable_name(name: &str) -> bool {
+    name.len() > 1 && !name.ends_with('_')
 }
 
 fn detect_ports(index: &RepositoryIndex) -> Vec<u16> {
@@ -777,7 +806,10 @@ fn detect_ports(index: &RepositoryIndex) -> Vec<u16> {
 
 #[cfg(test)]
 mod tests {
-    use super::{next_config_exports_static, normalize_relative, toml_has_dependency};
+    use super::{
+        next_config_exports_static, normalize_relative, toml_has_dependency,
+        valid_environment_variable_name,
+    };
     use std::path::Path;
 
     #[test]
@@ -807,5 +839,11 @@ mod tests {
         )
         .expect("valid Cargo manifest");
         assert!(toml_has_dependency(&manifest, "axum"));
+    }
+
+    #[test]
+    fn computed_environment_prefixes_are_ignored() {
+        assert!(valid_environment_variable_name("VITE_API_URL"));
+        assert!(!valid_environment_variable_name("VITE_"));
     }
 }

@@ -101,7 +101,7 @@ pub struct Evidence {
     /// Human-readable description that does not include source contents.
     pub description: String,
     /// Contribution to the candidate confidence score.
-    pub weight: f32,
+    pub weight: f64,
 }
 
 /// A supported classification and the evidence supporting it.
@@ -112,7 +112,7 @@ pub struct CandidateClassification {
     /// Repository-relative component root.
     pub component_root: String,
     /// Deterministic confidence in the range `0.0..=1.0`.
-    pub confidence: f32,
+    pub confidence: f64,
     /// Facts contributing to this candidate.
     pub evidence: Vec<Evidence>,
 }
@@ -175,7 +175,7 @@ pub struct ProjectProfile {
     /// Names of environment variables; values are never read or stored.
     pub environment_variables: Vec<EnvironmentVariable>,
     /// Confidence of the selected classification, or the strongest candidate.
-    pub confidence: f32,
+    pub confidence: f64,
     /// Every supported candidate meeting its minimum evidence contract.
     pub candidates: Vec<CandidateClassification>,
     /// Evidence for the selected classification, or all competing evidence.

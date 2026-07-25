@@ -7,6 +7,7 @@ use std::{
 };
 
 use flate2::read::GzDecoder;
+use futures_util::StreamExt;
 use reqwest::header::{ACCEPT, USER_AGENT};
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -88,7 +89,7 @@ impl RepositoryAcquirer {
     async fn acquire_github(&self, repository: &GitHubRepository) -> Result<AcquiredRepository> {
         info!(repository = %repository.slug(), "acquiring public GitHub snapshot");
 
-        let metadata_url = format!("https://api.github.com/repos/{}", repository.slug());
+        let metadata_url = github_api_url(&["repos", &repository.owner, &repository.name]);
         let metadata: RepositoryMetadata = self
             .client
             .get(metadata_url)
@@ -100,11 +101,13 @@ impl RepositoryAcquirer {
             .json()
             .await?;
 
-        let commit_url = format!(
-            "https://api.github.com/repos/{}/commits/{}",
-            repository.slug(),
-            metadata.default_branch
-        );
+        let commit_url = github_api_url(&[
+            "repos",
+            &repository.owner,
+            &repository.name,
+            "commits",
+            &metadata.default_branch,
+        ]);
         let commit: CommitMetadata = self
             .client
             .get(commit_url)
@@ -115,12 +118,17 @@ impl RepositoryAcquirer {
             .error_for_status()?
             .json()
             .await?;
+        if !is_commit_id(&commit.sha) {
+            return Err(LaunchGuardError::InvalidRemoteRevision(commit.sha));
+        }
 
-        let archive_url = format!(
-            "https://api.github.com/repos/{}/tarball/{}",
-            repository.slug(),
-            commit.sha
-        );
+        let archive_url = github_api_url(&[
+            "repos",
+            &repository.owner,
+            &repository.name,
+            "tarball",
+            &commit.sha,
+        ]);
         let response = self
             .client
             .get(archive_url)
@@ -139,11 +147,28 @@ impl RepositoryAcquirer {
             });
         }
 
-        let bytes = response.bytes().await?;
-        if bytes.len() > MAX_ARCHIVE_BYTES {
-            return Err(LaunchGuardError::ArchiveTooLarge {
-                limit_bytes: MAX_ARCHIVE_BYTES,
-            });
+        let initial_capacity = response
+            .content_length()
+            .and_then(|length| usize::try_from(length).ok())
+            .unwrap_or(0)
+            .min(MAX_ARCHIVE_BYTES);
+        let mut bytes = Vec::with_capacity(initial_capacity);
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            let next_size =
+                bytes
+                    .len()
+                    .checked_add(chunk.len())
+                    .ok_or(LaunchGuardError::ArchiveTooLarge {
+                        limit_bytes: MAX_ARCHIVE_BYTES,
+                    })?;
+            if next_size > MAX_ARCHIVE_BYTES {
+                return Err(LaunchGuardError::ArchiveTooLarge {
+                    limit_bytes: MAX_ARCHIVE_BYTES,
+                });
+            }
+            bytes.extend_from_slice(&chunk);
         }
 
         let temporary_directory = tempfile::Builder::new()
@@ -158,6 +183,14 @@ impl RepositoryAcquirer {
             _temporary_directory: Some(temporary_directory),
         })
     }
+}
+
+fn github_api_url(segments: &[&str]) -> Url {
+    let mut url = Url::parse("https://api.github.com").expect("static GitHub API URL is valid");
+    url.path_segments_mut()
+        .expect("GitHub API base URL supports path segments")
+        .extend(segments);
+    url
 }
 
 impl Default for RepositoryAcquirer {
@@ -355,6 +388,7 @@ impl GitHubRepository {
 fn valid_github_segment(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 100
+        && !matches!(value, "." | "..")
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
@@ -372,8 +406,15 @@ struct CommitMetadata {
 
 #[cfg(test)]
 mod tests {
-    use super::{GitHubRepository, is_commit_id, strip_archive_root};
-    use std::path::{Path, PathBuf};
+    use super::{
+        GitHubRepository, extract_snapshot, github_api_url, is_commit_id, strip_archive_root,
+    };
+    use flate2::{Compression, write::GzEncoder};
+    use std::{
+        fs,
+        io::Cursor,
+        path::{Path, PathBuf},
+    };
 
     #[test]
     fn github_url_is_normalized() {
@@ -388,6 +429,7 @@ mod tests {
     #[test]
     fn github_subpaths_are_rejected() {
         assert!(GitHubRepository::parse("https://github.com/example/project/tree/main").is_err());
+        assert!(GitHubRepository::parse("https://github.com/./project").is_err());
     }
 
     #[test]
@@ -404,5 +446,56 @@ mod tests {
         assert!(is_commit_id(&"a".repeat(40)));
         assert!(!is_commit_id(&"z".repeat(40)));
         assert!(!is_commit_id("deadbeef"));
+    }
+
+    #[test]
+    fn github_api_segments_are_percent_encoded() {
+        let url = github_api_url(&["repos", "owner", "repo", "commits", "feature/test#1"]);
+        assert!(
+            url.as_str()
+                .ends_with("/repos/owner/repo/commits/feature%2Ftest%231")
+        );
+    }
+
+    #[test]
+    fn archive_links_are_not_materialized() {
+        let encoder = GzEncoder::new(Vec::new(), Compression::default());
+        let mut archive = tar::Builder::new(encoder);
+
+        let content = b"safe";
+        let mut file_header = tar::Header::new_gnu();
+        file_header.set_size(u64::try_from(content.len()).expect("content length fits u64"));
+        file_header.set_mode(0o644);
+        file_header.set_cksum();
+        archive
+            .append_data(&mut file_header, "snapshot/README.md", Cursor::new(content))
+            .expect("append regular file");
+
+        let mut link_header = tar::Header::new_gnu();
+        link_header.set_entry_type(tar::EntryType::Symlink);
+        link_header.set_size(0);
+        link_header.set_mode(0o777);
+        link_header
+            .set_link_name("../../outside")
+            .expect("set link target");
+        link_header.set_cksum();
+        archive
+            .append_data(
+                &mut link_header,
+                "snapshot/escape",
+                Cursor::new(Vec::<u8>::new()),
+            )
+            .expect("append symbolic link");
+
+        let encoder = archive.into_inner().expect("finish archive");
+        let bytes = encoder.finish().expect("finish compression");
+        let destination = tempfile::tempdir().expect("create extraction directory");
+        extract_snapshot(&bytes, destination.path()).expect("extract safe entries");
+
+        assert_eq!(
+            fs::read_to_string(destination.path().join("README.md")).expect("read regular file"),
+            "safe"
+        );
+        assert!(!destination.path().join("escape").exists());
     }
 }

@@ -288,14 +288,15 @@
       "id": "axum-workspace-dependency",
       "expected": "rust_axum",
       "files": {
-        "Cargo.toml": "[workspace]\nmembers=[]\n[workspace.dependencies]\naxum=\"0.8\"\n"
+        "Cargo.toml": "[workspace]\nmembers=[\"api\"]\n[workspace.dependencies]\naxum=\"0.8\"\n",
+        "api/Cargo.toml": "[package]\nname=\"api\"\nversion=\"0.1.0\"\n[dependencies]\naxum={workspace=true}\n"
       }
     },
     {
-      "id": "axum-dev-dependency",
+      "id": "axum-renamed-dependency",
       "expected": "rust_axum",
       "files": {
-        "api/Cargo.toml": "[package]\nname=\"api\"\nversion=\"0.1.0\"\n[dev-dependencies]\naxum=\"0.8\"\n",
+        "api/Cargo.toml": "[package]\nname=\"api\"\nversion=\"0.1.0\"\n[dependencies]\nweb-framework={package=\"axum\",version=\"0.8\"}\n",
         "api/src/lib.rs": "pub fn fixture() {}\n"
       }
     },
@@ -308,10 +309,10 @@
       }
     },
     {
-      "id": "axum-build-dependency",
+      "id": "axum-git-dependency",
       "expected": "rust_axum",
       "files": {
-        "tools/api/Cargo.toml": "[package]\nname=\"tools-api\"\nversion=\"0.1.0\"\n[build-dependencies]\naxum=\"0.8\"\n"
+        "tools/api/Cargo.toml": "[package]\nname=\"tools-api\"\nversion=\"0.1.0\"\n[dependencies]\naxum={git=\"https://github.com/tokio-rs/axum\"}\n"
       }
     },
     {
@@ -377,6 +378,20 @@
       "expected_status": "unsupported",
       "files": {
         "package.json": "{\"dependencies\":{\"react\":\"latest\"}}"
+      }
+    },
+    {
+      "id": "axum-dev-dependency-is-not-runtime",
+      "expected_status": "unsupported",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"test-helper\"\nversion=\"0.1.0\"\n[dev-dependencies]\naxum=\"0.8\"\n"
+      }
+    },
+    {
+      "id": "axum-build-dependency-is-not-runtime",
+      "expected_status": "unsupported",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"build-helper\"\nversion=\"0.1.0\"\n[build-dependencies]\naxum=\"0.8\"\n"
       }
     }
   ]
