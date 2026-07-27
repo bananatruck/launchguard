@@ -1,0 +1,56 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "/fixture",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "package-lock.json",
+      "Class": "lang-pkgs",
+      "Type": "npm",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2024-12345",
+          "PkgName": "example-lib",
+          "InstalledVersion": "1.0.0",
+          "FixedVersion": "1.2.0",
+          "Severity": "HIGH",
+          "Title": "Example dependency vulnerability"
+        }
+      ]
+    },
+    {
+      "Target": "src/config.ts",
+      "Class": "secret",
+      "Secrets": [
+        {
+          "RuleID": "generic-api-key",
+          "Category": "General",
+          "Severity": "CRITICAL",
+          "Title": "Generic API Key",
+          "StartLine": 7,
+          "EndLine": 7,
+          "Match": "SUPER_SECRET_DO_NOT_EXPOSE",
+          "Code": "const key = 'SUPER_SECRET_DO_NOT_EXPOSE'"
+        }
+      ]
+    },
+    {
+      "Target": "Dockerfile",
+      "Class": "config",
+      "Misconfigurations": [
+        {
+          "ID": "DS002",
+          "AVDID": "AVD-DS-0002",
+          "Title": "Image user should not be root",
+          "Message": "Specify a non-root USER",
+          "Resolution": "Add a USER instruction",
+          "Severity": "HIGH",
+          "CauseMetadata": {
+            "StartLine": 1,
+            "EndLine": 1
+          }
+        }
+      ]
+    }
+  ]
+}

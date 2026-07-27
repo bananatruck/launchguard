@@ -48,6 +48,61 @@ pub enum LaunchGuardError {
     #[error("JSON parsing failed: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// A scanner executable could not be started.
+    #[error("{scanner} is unavailable at {executable}: {source}")]
+    ScannerUnavailable {
+        /// Stable scanner name.
+        scanner: &'static str,
+        /// Configured executable.
+        executable: PathBuf,
+        /// Process launch failure.
+        source: std::io::Error,
+    },
+
+    /// A scanner exceeded its execution deadline.
+    #[error("{scanner} exceeded its {timeout_seconds}-second timeout")]
+    ScannerTimeout {
+        /// Stable scanner name.
+        scanner: &'static str,
+        /// Configured deadline.
+        timeout_seconds: u64,
+    },
+
+    /// A scanner produced more output than `LaunchGuard` accepts.
+    #[error("{scanner} {stream} exceeded the {limit_bytes}-byte limit")]
+    ScannerOutputTooLarge {
+        /// Stable scanner name.
+        scanner: &'static str,
+        /// Standard stream being collected.
+        stream: &'static str,
+        /// Configured maximum.
+        limit_bytes: usize,
+    },
+
+    /// A scanner returned a failure exit status.
+    #[error("{scanner} failed with status {status}: {message}")]
+    ScannerFailed {
+        /// Stable scanner name.
+        scanner: &'static str,
+        /// Numeric status, or `terminated` when unavailable.
+        status: String,
+        /// Bounded, lossy diagnostic output.
+        message: String,
+    },
+
+    /// A scanner JSON contract is unsupported or malformed.
+    #[error("unsupported or malformed {scanner} report: {message}")]
+    ScannerReport {
+        /// Stable scanner name.
+        scanner: &'static str,
+        /// Contract failure without report contents.
+        message: String,
+    },
+
+    /// A background scanner-output task could not be joined.
+    #[error("scanner output task failed: {0}")]
+    ScannerTask(#[from] tokio::task::JoinError),
+
     /// A `SQLite` operation failed.
     #[error("history database operation failed: {0}")]
     Sqlite(#[from] rusqlite::Error),

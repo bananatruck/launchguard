@@ -1,0 +1,56 @@
+{
+  "results": [
+    {
+      "source": {
+        "path": "package-lock.json",
+        "type": "lockfile"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "example-lib",
+            "version": "1.0.0",
+            "ecosystem": "npm"
+          },
+          "vulnerabilities": [
+            {
+              "id": "GHSA-AAAA-BBBB-CCCC",
+              "aliases": [
+                "CVE-2024-12345"
+              ],
+              "summary": "Overlapping OSV finding",
+              "database_specific": {
+                "severity": "HIGH"
+              },
+              "affected": [
+                {
+                  "ranges": [
+                    {
+                      "type": "SEMVER",
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "fixed": "1.2.0"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "ids": [
+            "GHSA-AAAA-BBBB-CCCC",
+            "CVE-2024-12345"
+          ]
+        }
+      ]
+    }
+  ]
+}
