@@ -86,10 +86,10 @@ async fn reviewed_plans_cover_at_least_ninety_percent_of_supported_corpus() {
                 assert_eq!(plan, duplicate, "{} plan is not deterministic", case.id);
 
                 let first = readiness
-                    .assess(&profile, &[], Some(&plan))
+                    .assess(&profile, &[], &[], Some(&plan))
                     .expect("score plan");
                 let second = readiness
-                    .assess(&profile, &[], Some(&duplicate))
+                    .assess(&profile, &[], &[], Some(&duplicate))
                     .expect("reproduce score");
                 assert_eq!(first, second, "{} score is not deterministic", case.id);
                 first
@@ -157,7 +157,7 @@ async fn deterministic_policy_blocks_critical_secret_fixture() {
     let findings =
         normalize_trivy(include_bytes!("scanner/trivy.json")).expect("normalize security fixture");
     let assessment = ReadinessEngine
-        .assess(&profile, &findings, Some(&plan))
+        .assess(&profile, &findings, &[], Some(&plan))
         .expect("assess fixture");
 
     assert!(assessment.blocks_preview);

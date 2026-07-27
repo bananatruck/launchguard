@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/finding-v1.schema.json",
+  "title": "LaunchGuard Finding v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fingerprint",
+    "scanners",
+    "category",
+    "severity",
+    "confidence",
+    "vulnerability_id",
+    "package",
+    "location",
+    "summary",
+    "recommended_fix",
+    "blocks_preview",
+    "blocks_publication",
+    "raw_artifact_digests"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scanners": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["trivy", "osv_scanner"]
+      }
+    },
+    "category": {
+      "enum": ["vulnerability", "secret", "misconfiguration", "license"]
+    },
+    "severity": {
+      "enum": ["unknown", "low", "medium", "high", "critical"]
+    },
+    "confidence": {
+      "enum": ["low", "medium", "high"]
+    },
+    "vulnerability_id": {
+      "type": ["string", "null"]
+    },
+    "package": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/package"
+        }
+      ]
+    },
+    "location": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/location"
+        }
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recommended_fix": {
+      "type": ["string", "null"]
+    },
+    "blocks_preview": {
+      "type": "boolean"
+    },
+    "blocks_publication": {
+      "type": "boolean"
+    },
+    "raw_artifact_digests": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
+  },
+  "$defs": {
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ecosystem", "name", "installed_version", "fixed_version"],
+      "properties": {
+        "ecosystem": {
+          "type": ["string", "null"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installed_version": {
+          "type": ["string", "null"]
+        },
+        "fixed_version": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "start_line", "end_line"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "start_line": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "end_line": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

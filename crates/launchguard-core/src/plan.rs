@@ -11,6 +11,10 @@ use crate::{
 /// Execution-plan contract emitted by this release.
 pub const EXECUTION_PLAN_SCHEMA_VERSION: &str = "1.0";
 
+/// Bundled JSON Schema for [`ExecutionPlan`].
+pub const EXECUTION_PLAN_SCHEMA_JSON: &str =
+    include_str!("../../../schemas/execution-plan-v1.schema.json");
+
 /// Version of the human-reviewed command templates.
 pub const REVIEWED_TEMPLATE_VERSION: &str = "2026-07-26.1";
 

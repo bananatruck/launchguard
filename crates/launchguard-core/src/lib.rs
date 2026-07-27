@@ -16,8 +16,8 @@ pub use artifact::{ArtifactStore, RAW_ARTIFACT_SCHEMA_VERSION, RawArtifact};
 pub use detect::{DetectionEngine, DetectionLimits};
 pub use error::{LaunchGuardError, Result};
 pub use finding::{
-    Confidence, FINDING_SCHEMA_VERSION, Finding, FindingCategory, FindingLocation,
-    PackageReference, ScannerKind, Severity,
+    Confidence, FINDING_SCHEMA_JSON, FINDING_SCHEMA_VERSION, Finding, FindingCategory,
+    FindingLocation, PackageReference, ScannerKind, Severity,
 };
 pub use history::{HistoryEntry, HistoryStore};
 pub use model::{
@@ -26,13 +26,13 @@ pub use model::{
     PackageManager, ProjectProfile, Runtime,
 };
 pub use plan::{
-    ApprovalState, CommandStage, EXECUTION_PLAN_SCHEMA_VERSION, ExecutionPlan, ExpectedOutput,
-    HealthCheck, HealthCheckKind, NetworkPolicy, OutputKind, PlanCommand, PlanGenerator,
-    REVIEWED_TEMPLATE_VERSION, ResourceLimits,
+    ApprovalState, CommandStage, EXECUTION_PLAN_SCHEMA_JSON, EXECUTION_PLAN_SCHEMA_VERSION,
+    ExecutionPlan, ExpectedOutput, HealthCheck, HealthCheckKind, NetworkPolicy, OutputKind,
+    PlanCommand, PlanGenerator, REVIEWED_TEMPLATE_VERSION, ResourceLimits,
 };
 pub use readiness::{
-    DimensionScore, READINESS_POLICY_VERSION, READINESS_SCHEMA_VERSION, ReadinessAssessment,
-    ReadinessCheck, ReadinessDimension, ReadinessEngine, ReadinessScores,
+    DimensionScore, READINESS_POLICY_VERSION, READINESS_SCHEMA_JSON, READINESS_SCHEMA_VERSION,
+    ReadinessAssessment, ReadinessCheck, ReadinessDimension, ReadinessEngine, ReadinessScores,
 };
 pub use scanner::{
     ScannerConfig, ScannerLimits, ScannerReport, ScannerRunner, merge_findings, normalize_osv,

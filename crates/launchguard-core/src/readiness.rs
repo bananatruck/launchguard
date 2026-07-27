@@ -5,11 +5,15 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ApprovalState, CommandStage, DetectionStatus, ExecutionPlan, Finding, FindingCategory,
-    ProjectProfile, Result, Severity, merge_findings,
+    ProjectProfile, Result, ScannerKind, Severity, merge_findings,
 };
 
 /// Readiness-assessment contract emitted by this release.
 pub const READINESS_SCHEMA_VERSION: &str = "1.0";
+
+/// Bundled JSON Schema for [`ReadinessAssessment`].
+pub const READINESS_SCHEMA_JSON: &str =
+    include_str!("../../../schemas/readiness-assessment-v1.schema.json");
 
 /// Deterministic scoring-policy release.
 pub const READINESS_POLICY_VERSION: &str = "2026-07-26.1";
@@ -76,6 +80,7 @@ struct AssessmentPayload<'a> {
     profile_revision: &'a str,
     plan_digest: Option<&'a str>,
     findings_digest: &'a str,
+    completed_scanners: &'a [ScannerKind],
     checks: &'a [ReadinessCheck],
     scores: &'a ReadinessScores,
     blocks_preview: bool,
@@ -95,6 +100,8 @@ pub struct ReadinessAssessment {
     pub plan_digest: Option<String>,
     /// SHA-256 of the sorted normalized findings.
     pub findings_digest: String,
+    /// Trusted scanners that completed with schema-valid reports.
+    pub completed_scanners: Vec<ScannerKind>,
     /// Every input-backed scoring decision.
     pub checks: Vec<ReadinessCheck>,
     /// Published scores.
@@ -139,9 +146,15 @@ impl ReadinessEngine {
         &self,
         profile: &ProjectProfile,
         findings: &[Finding],
+        completed_scanners: &[ScannerKind],
         plan: Option<&ExecutionPlan>,
     ) -> Result<ReadinessAssessment> {
         let findings = merge_findings(findings.to_vec());
+        let mut completed_scanners = completed_scanners.to_vec();
+        completed_scanners.sort_unstable();
+        completed_scanners.dedup();
+        let scan_coverage_complete =
+            completed_scanners == [ScannerKind::Trivy, ScannerKind::OsvScanner];
         let findings_digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&findings)?));
         let critical_vulnerability = findings.iter().any(|finding| {
             finding.category == FindingCategory::Vulnerability
@@ -205,21 +218,21 @@ impl ReadinessEngine {
                 "security.no_critical_vulnerabilities",
                 ReadinessDimension::Security,
                 !critical_vulnerability,
-                35,
+                25,
                 "No critical dependency vulnerability blocks preview",
             ),
             check(
                 "security.no_blocking_secrets",
                 ReadinessDimension::Security,
                 !blocking_secret,
-                35,
+                25,
                 "No high-confidence secret blocks execution",
             ),
             check(
                 "security.no_high_publication_blockers",
                 ReadinessDimension::Security,
                 !high_publication_blocker,
-                20,
+                15,
                 "No high-severity finding blocks publication",
             ),
             check(
@@ -228,8 +241,15 @@ impl ReadinessEngine {
                 findings
                     .iter()
                     .all(|finding| finding.fingerprint.len() == 64),
-                10,
+                5,
                 "All findings have stable fingerprints",
+            ),
+            check(
+                "security.scanner_coverage",
+                ReadinessDimension::Security,
+                scan_coverage_complete,
+                30,
+                "Trivy and OSV-Scanner completed with valid reports",
             ),
             check(
                 "deployment.kind",
@@ -318,7 +338,8 @@ impl ReadinessEngine {
         let scores = scores(&checks);
         let blocks_preview = findings.iter().any(|finding| finding.blocks_preview)
             || profile.status != DetectionStatus::Detected
-            || plan.is_none();
+            || plan.is_none()
+            || !scan_coverage_complete;
         let blocks_publication =
             findings.iter().any(|finding| finding.blocks_publication) || blocks_preview;
         let mut assessment = ReadinessAssessment {
@@ -327,6 +348,7 @@ impl ReadinessEngine {
             profile_revision: profile.revision.clone(),
             plan_digest: plan.map(|value| value.digest.clone()),
             findings_digest,
+            completed_scanners,
             checks,
             scores,
             blocks_preview,
@@ -397,6 +419,7 @@ fn assessment_digest(assessment: &ReadinessAssessment) -> Result<String> {
         profile_revision: &assessment.profile_revision,
         plan_digest: assessment.plan_digest.as_deref(),
         findings_digest: &assessment.findings_digest,
+        completed_scanners: &assessment.completed_scanners,
         checks: &assessment.checks,
         scores: &assessment.scores,
         blocks_preview: assessment.blocks_preview,

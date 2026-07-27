@@ -20,6 +20,7 @@ clap = { version = "4", features = ["derive", "env"] }
 directories = "6"
 flate2 = "1"
 futures-util = "0.3"
+jsonschema = { version = "0.33", default-features = false }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.37", features = ["bundled"] }

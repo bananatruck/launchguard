@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 /// Finding contract emitted by this release.
 pub const FINDING_SCHEMA_VERSION: &str = "1.0";
 
+/// Bundled JSON Schema for [`Finding`].
+pub const FINDING_SCHEMA_JSON: &str = include_str!("../../../schemas/finding-v1.schema.json");
+
 /// Supported external security scanner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
