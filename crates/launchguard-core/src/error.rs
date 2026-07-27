@@ -114,6 +114,17 @@ pub enum LaunchGuardError {
     /// A requested run does not exist.
     #[error("run not found: {0}")]
     RunNotFound(String),
+
+    /// A reviewed execution plan cannot be generated from this profile.
+    #[error("execution plan unavailable: {0}")]
+    PlanUnavailable(String),
+
+    /// A content-addressed record does not match its embedded digest.
+    #[error("content digest mismatch for {record}")]
+    DigestMismatch {
+        /// Record type that failed validation.
+        record: &'static str,
+    },
 }
 
 /// Result type used by the `LaunchGuard` engine.

@@ -7,6 +7,8 @@ mod error;
 mod finding;
 mod history;
 mod model;
+mod plan;
+mod readiness;
 mod scanner;
 
 pub use acquire::{AcquiredRepository, RepositoryAcquirer};
@@ -22,6 +24,15 @@ pub use model::{
     CandidateClassification, Component, DeploymentKind, DetectionStatus, EnvironmentVariable,
     Evidence, Framework, PROJECT_PROFILE_SCHEMA_JSON, PROJECT_PROFILE_SCHEMA_VERSION,
     PackageManager, ProjectProfile, Runtime,
+};
+pub use plan::{
+    ApprovalState, CommandStage, EXECUTION_PLAN_SCHEMA_VERSION, ExecutionPlan, ExpectedOutput,
+    HealthCheck, HealthCheckKind, NetworkPolicy, OutputKind, PlanCommand, PlanGenerator,
+    REVIEWED_TEMPLATE_VERSION, ResourceLimits,
+};
+pub use readiness::{
+    DimensionScore, READINESS_POLICY_VERSION, READINESS_SCHEMA_VERSION, ReadinessAssessment,
+    ReadinessCheck, ReadinessDimension, ReadinessEngine, ReadinessScores,
 };
 pub use scanner::{
     ScannerConfig, ScannerLimits, ScannerReport, ScannerRunner, merge_findings, normalize_osv,
