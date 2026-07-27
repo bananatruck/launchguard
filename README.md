@@ -151,10 +151,12 @@ The detailed contract is in
 
 ## Status
 
-Phase 1 is implemented and undergoing milestone validation. The checked-in
-synthetic corpus contains 40 supported fixtures and fail-closed ambiguity
-fixtures. Measured results and limitations are published before the roadmap
-phase is marked complete.
+Phase 1 is complete. The checked-in synthetic corpus contains 40 supported
+fixtures and seven fail-closed safety fixtures; the measured classification
+result is 40/40. See the
+[Phase 1 evaluation report](docs/evaluation/phase-1.md) for the environment,
+raw counts, security audit, smoke checks, and limitations. Phase 2 security
+normalization and deterministic planning are next.
 
 ## License
 

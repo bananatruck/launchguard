@@ -18,7 +18,7 @@ jobs:
           globs: |
             README.md
             CONTRIBUTING.md
-            docs/*.md
+            docs/**/*.md
 
   links:
     runs-on: ubuntu-latest
@@ -32,5 +32,5 @@ jobs:
             --no-progress
             README.md
             CONTRIBUTING.md
-            docs/*.md
+            docs/**/*.md
           fail: true

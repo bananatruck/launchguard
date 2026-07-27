@@ -15,6 +15,9 @@ has a documented approval rule.
 
 ## Phase 1: Read-only Rust engine
 
+**Status: complete.** See the
+[Phase 1 evaluation report](evaluation/phase-1.md).
+
 - Create a Rust workspace with engine and CLI crates.
 - Implement repository acquisition without executing project code.
 - Detect React/Vite, Next.js, FastAPI, and Rust/Axum projects.
@@ -25,6 +28,8 @@ has a documented approval rule.
 corpus, with ambiguous cases reported rather than guessed.
 
 ## Phase 2: Security normalization and planning
+
+**Status: next.**
 
 - Add Trivy and OSV-Scanner adapters.
 - Preserve raw reports and normalize stable `Finding` records.
