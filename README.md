@@ -96,8 +96,24 @@ typed events and operations rather than implementing separate workflows.
 
 ## Quick start
 
-LaunchGuard requires Rust 1.97.1. The repository pins the toolchain and commits
-its dependency lockfile. Trivy and OSV-Scanner are optional; a missing scanner
+Once a release is published, no toolchain is needed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bananatruck/launchguard/main/install.sh | sh
+launchguard doctor
+launchguard setup
+launchguard audit ./path/to/project
+```
+
+The installer verifies the published SHA-256 before installing and refuses to
+continue on a mismatch. Binaries are unsigned, so macOS and Windows may warn on
+first run. Read [`install.sh`](install.sh) before piping it to a shell — it is
+deliberately short enough to audit.
+
+### From source
+
+Building requires Rust 1.97.1. The repository pins the toolchain and commits its
+dependency lockfile. Trivy and OSV-Scanner are optional; a missing scanner
 degrades coverage instead of failing the run.
 
 ```bash

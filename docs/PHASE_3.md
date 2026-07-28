@@ -160,9 +160,15 @@ them completed with 26 findings, 23 confirmed by both scanners, and no
 degradation. A second `setup` reported both already present without
 re-downloading.
 
+Distribution is implemented. `.github/workflows/release.yml` builds all five
+targets on tag push and publishes archives with a `SHA256SUMS` manifest.
+`install.sh` resolves the host triple, downloads the matching archive, verifies
+it against the published digest, and refuses to install on a mismatch. It is
+short enough to read before piping to a shell, which is the point.
+
 Remaining in this phase:
 
-- Release binaries, checksums, and the install script.
+- Cutting the first tagged release, so the install script has something to fetch.
 - Disk and memory probing for preview admission control.
 - Threading the capability report through `RunRecord` so a stored run states
   which capabilities were present when it was produced.
