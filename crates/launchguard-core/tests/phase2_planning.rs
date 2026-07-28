@@ -3,8 +3,8 @@
 use std::{collections::BTreeMap, fs, path::Path};
 
 use launchguard_core::{
-    ApprovalState, DetectionEngine, DetectionStatus, Framework, PlanGenerator, ReadinessEngine,
-    RepositoryAcquirer, normalize_trivy,
+    ApprovalState, DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON, Framework,
+    PlanGenerator, READINESS_SCHEMA_JSON, ReadinessEngine, RepositoryAcquirer, normalize_trivy,
 };
 use serde::Deserialize;
 
@@ -46,6 +46,18 @@ fn materialize(files: &BTreeMap<String, String>) -> tempfile::TempDir {
     directory
 }
 
+/// Compile the bundled schemas once for the whole corpus sweep.
+fn validators() -> (jsonschema::Validator, jsonschema::Validator) {
+    let compile = |schema: &str| {
+        let schema: serde_json::Value = serde_json::from_str(schema).expect("parse bundled schema");
+        jsonschema::validator_for(&schema).expect("compile bundled schema")
+    };
+    (
+        compile(EXECUTION_PLAN_SCHEMA_JSON),
+        compile(READINESS_SCHEMA_JSON),
+    )
+}
+
 #[tokio::test]
 async fn reviewed_plans_cover_at_least_ninety_percent_of_supported_corpus() {
     let corpus = load_corpus();
@@ -53,6 +65,7 @@ async fn reviewed_plans_cover_at_least_ninety_percent_of_supported_corpus() {
     let detector = DetectionEngine::default();
     let planner = PlanGenerator;
     let readiness = ReadinessEngine;
+    let (plan_schema, readiness_schema) = validators();
     let mut plan_successes = 0_usize;
     let mut failures = Vec::new();
 
@@ -67,6 +80,13 @@ async fn reviewed_plans_cover_at_least_ninety_percent_of_supported_corpus() {
 
         match planner.generate(&profile) {
             Ok(plan) => {
+                // The roadmap gate is schema-valid plans, so a plan that
+                // generates but does not validate is not counted as a success.
+                let serialized = serde_json::to_value(&plan).expect("serialize plan");
+                if let Err(error) = plan_schema.validate(&serialized) {
+                    failures.push(format!("{}: plan failed bundled schema: {error}", case.id));
+                    continue;
+                }
                 plan_successes += 1;
                 assert_eq!(plan.approval_state, ApprovalState::RequiresApproval);
                 assert!(plan.network_policy.default_deny);
@@ -95,6 +115,10 @@ async fn reviewed_plans_cover_at_least_ninety_percent_of_supported_corpus() {
                 first
                     .validate_digest()
                     .expect("assessment digest should reproduce");
+                let assessment = serde_json::to_value(&first).expect("serialize assessment");
+                if let Err(error) = readiness_schema.validate(&assessment) {
+                    panic!("{}: assessment failed bundled schema: {error}", case.id);
+                }
             }
             Err(error) => failures.push(format!("{}: {error}", case.id)),
         }
@@ -103,12 +127,12 @@ async fn reviewed_plans_cover_at_least_ninety_percent_of_supported_corpus() {
     let percentage = plan_successes * 100 / corpus.supported.len();
     assert!(
         percentage >= 90,
-        "only {plan_successes}/{} fixtures planned:\n{}",
+        "only {plan_successes}/{} fixtures produced a schema-valid plan:\n{}",
         corpus.supported.len(),
         failures.join("\n")
     );
     eprintln!(
-        "Phase 2 reviewed plan coverage: {plan_successes}/{} ({percentage}%)",
+        "Phase 2 schema-valid plan coverage: {plan_successes}/{} ({percentage}%)",
         corpus.supported.len()
     );
 }
@@ -154,8 +178,8 @@ async fn deterministic_policy_blocks_critical_secret_fixture() {
         .inspect(&repository)
         .expect("inspect fixture");
     let plan = PlanGenerator.generate(&profile).expect("generate plan");
-    let findings =
-        normalize_trivy(include_bytes!("scanner/trivy.json")).expect("normalize security fixture");
+    let findings = normalize_trivy(include_bytes!("scanner/trivy.json"), fixture.path())
+        .expect("normalize security fixture");
     let assessment = ReadinessEngine
         .assess(&profile, &findings, &[], Some(&plan))
         .expect("assess fixture");
@@ -163,4 +187,53 @@ async fn deterministic_policy_blocks_critical_secret_fixture() {
     assert!(assessment.blocks_preview);
     assert!(assessment.blocks_publication);
     assert!(assessment.scores.security.percentage < 50);
+}
+
+/// Regression: Trivy embeds a per-run report identifier and timestamp, so the
+/// stored raw report has a different digest on every run. That provenance must
+/// not leak into the assessment digest, or no assessment ever reproduces.
+#[tokio::test]
+async fn assessments_reproduce_when_only_raw_report_provenance_differs() {
+    let fixture = tempfile::tempdir().expect("create fixture");
+    fs::create_dir_all(fixture.path().join("src")).expect("create source directory");
+    fs::write(
+        fixture.path().join("package.json"),
+        r#"{"dependencies":{"react":"latest","vite":"latest"},"scripts":{"build":"vite build"}}"#,
+    )
+    .expect("write package manifest");
+    fs::write(fixture.path().join("package-lock.json"), "{}").expect("write lockfile");
+    fs::write(fixture.path().join("src/main.tsx"), "export default {};").expect("write source");
+
+    let repository = RepositoryAcquirer::new()
+        .expect("create acquirer")
+        .acquire(fixture.path().to_str().expect("UTF-8 fixture path"))
+        .await
+        .expect("acquire fixture");
+    let profile = DetectionEngine::default()
+        .inspect(&repository)
+        .expect("inspect fixture");
+    let plan = PlanGenerator.generate(&profile).expect("generate plan");
+
+    let first = normalize_trivy(include_bytes!("scanner/trivy.json"), fixture.path())
+        .expect("normalize security fixture");
+    let mut second = first.clone();
+    for finding in &mut second {
+        finding.raw_artifact_digests = vec![format!("{:064x}", 1)];
+    }
+    assert_ne!(
+        first[0].raw_artifact_digests, second[0].raw_artifact_digests,
+        "the two runs must differ only in raw report provenance"
+    );
+
+    let scanners = [launchguard_core::ScannerKind::Trivy];
+    let left = ReadinessEngine
+        .assess(&profile, &first, &scanners, Some(&plan))
+        .expect("assess first run");
+    let right = ReadinessEngine
+        .assess(&profile, &second, &scanners, Some(&plan))
+        .expect("assess second run");
+
+    assert_eq!(left.findings_digest, right.findings_digest);
+    assert_eq!(left.reproduction_digest, right.reproduction_digest);
+    assert_eq!(left.scores, right.scores);
 }

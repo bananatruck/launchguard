@@ -65,6 +65,65 @@ fn audit_is_machine_readable_persisted_and_non_executing() {
         serde_json::from_slice(&status.stdout).expect("parse stored run");
     assert_eq!(stored["run_id"], run_id);
     assert_eq!(stored["profile"]["framework"], "react_vite");
+
+    // History schema 2 replays the whole audit, not just the profile.
+    assert_eq!(stored["plan"]["digest"], output["plan"]["digest"]);
+    assert_eq!(
+        stored["readiness"]["reproduction_digest"],
+        output["readiness"]["reproduction_digest"]
+    );
+    assert!(stored["readiness"]["reproduction_digest"].is_string());
+}
+
+#[test]
+fn a_missing_scanner_degrades_coverage_instead_of_failing_the_audit() {
+    let fixture = tempfile::tempdir().expect("create fixture");
+    fs::create_dir_all(fixture.path().join("src")).expect("create source directory");
+    fs::write(
+        fixture.path().join("package.json"),
+        r#"{"dependencies": {"react": "latest", "vite": "latest"}, "scripts": {"build": "vite build"}}"#,
+    )
+    .expect("write package manifest");
+    fs::write(fixture.path().join("package-lock.json"), "{}").expect("write lockfile");
+    fs::write(fixture.path().join("src/main.ts"), "export default {};").expect("write source");
+
+    let absent = fixture.path().join("no-such-scanner");
+    let audit = Command::new(env!("CARGO_BIN_EXE_launchguard"))
+        .arg("audit")
+        .arg(fixture.path())
+        .arg("--format")
+        .arg("json")
+        .arg("--no-history")
+        .arg("--scanner")
+        .arg("trivy")
+        .arg("--trivy-executable")
+        .arg(&absent)
+        .output()
+        .expect("run audit");
+    assert!(
+        audit.status.success(),
+        "a missing scanner must not fail the audit: {}",
+        String::from_utf8_lossy(&audit.stderr)
+    );
+
+    let output: serde_json::Value =
+        serde_json::from_slice(&audit.stdout).expect("parse audit JSON");
+    let degradations = output["degradations"]
+        .as_array()
+        .expect("degradations are reported");
+    assert_eq!(degradations.len(), 1);
+    assert_eq!(degradations[0]["kind"], "scanner_unavailable");
+    assert_eq!(degradations[0]["subject"], "trivy");
+
+    // Reduced coverage stays visible instead of reading as a clean scan.
+    assert_eq!(output["profile"]["status"], "detected");
+    assert!(output["plan"]["digest"].is_string());
+    assert_eq!(
+        output["readiness"]["completed_scanners"],
+        serde_json::json!([])
+    );
+    assert_eq!(output["readiness"]["blocks_preview"], true);
+    assert_eq!(output["readiness"]["blocks_publication"], true);
 }
 
 #[test]
@@ -119,8 +178,7 @@ fn plan_is_typed_approval_gated_and_deterministic() {
     );
     assert_eq!(first.stdout, second.stdout);
 
-    let output: serde_json::Value =
-        serde_json::from_slice(&first.stdout).expect("parse plan JSON");
+    let output: serde_json::Value = serde_json::from_slice(&first.stdout).expect("parse plan JSON");
     assert_eq!(output["plan"]["approval_state"], "requires_approval");
     assert_eq!(output["plan"]["network_policy"]["default_deny"], true);
     assert_eq!(output["readiness"]["blocks_preview"], true);
@@ -139,10 +197,8 @@ fn phase_two_schema_commands_emit_expected_contracts() {
     for (record, title) in [
         ("finding", "LaunchGuard Finding v1"),
         ("execution-plan", "LaunchGuard ExecutionPlan v1"),
-        (
-            "readiness-assessment",
-            "LaunchGuard ReadinessAssessment v1",
-        ),
+        ("readiness-assessment", "LaunchGuard ReadinessAssessment v1"),
+        ("degradation", "LaunchGuard Degradation v1"),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_launchguard"))
             .arg("schema")

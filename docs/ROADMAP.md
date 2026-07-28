@@ -29,7 +29,8 @@ corpus, with ambiguous cases reported rather than guessed.
 
 ## Phase 2: Security normalization and planning
 
-**Status: next.**
+**Status: complete.** See the
+[Phase 2 evaluation report](evaluation/phase-2.md).
 
 - Add Trivy and OSV-Scanner adapters.
 - Preserve raw reports and normalize stable `Finding` records.
@@ -40,6 +41,8 @@ corpus, with ambiguous cases reported rather than guessed.
 and deterministic score reproduction.
 
 ## Phase 3: Cross-platform isolated preview
+
+**Status: next.**
 
 - Implement the OCI runtime trait.
 - Support native rootless Podman on Linux.

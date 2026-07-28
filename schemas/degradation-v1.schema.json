@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/degradation-v1.schema.json",
+  "title": "LaunchGuard Degradation v1",
+  "description": "A capability that did not complete. Reduced coverage is reported explicitly and never inferred from an empty finding list.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "subject", "detail"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "kind": {
+      "enum": [
+        "scanner_unavailable",
+        "scanner_timeout",
+        "scanner_failed",
+        "scanner_report_rejected",
+        "artifact_not_stored",
+        "plan_unavailable"
+      ]
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 515
+    }
+  }
+}

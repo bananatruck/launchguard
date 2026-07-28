@@ -2,7 +2,7 @@
   "results": [
     {
       "source": {
-        "path": "package-lock.json",
+        "path": "/tmp/launchguard-fixture/package-lock.json",
         "type": "lockfile"
       },
       "packages": [

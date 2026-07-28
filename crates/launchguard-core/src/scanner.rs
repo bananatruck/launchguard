@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -55,11 +56,44 @@ impl Default for ScannerLimits {
     }
 }
 
+/// Scanner provenance contract emitted by this release.
+pub const SCANNER_PROVENANCE_SCHEMA_VERSION: &str = "1.0";
+
+/// Identity of the exact scanner build and vulnerability data used by a run.
+///
+/// `LaunchGuard` may report that a named scanner completed against a named
+/// database version. It may never present that as proof a project is secure.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ScannerProvenance {
+    /// Public record schema.
+    pub schema_version: String,
+    /// Scanner the versions describe.
+    pub scanner: ScannerKind,
+    /// Reported executable version.
+    pub version: String,
+    /// Vulnerability database schema version, when the scanner reports one.
+    pub vulnerability_database_version: Option<String>,
+    /// Vulnerability database build time, when the scanner reports one.
+    pub vulnerability_database_updated_at: Option<String>,
+}
+
+/// OSV-Scanner exit status meaning it found no package manifests to match.
+const OSV_NO_PACKAGE_SOURCES: i32 = 128;
+
+/// OSV-Scanner exit status meaning it matched at least one vulnerability.
+const OSV_VULNERABILITIES_FOUND: i32 = 1;
+
 /// Exact output of a completed scanner process.
 #[derive(Debug)]
 pub struct ScannerReport {
     scanner: ScannerKind,
     raw_json: Vec<u8>,
+    repository_root: PathBuf,
+    /// The scanner ran but found nothing in its ecosystem to inspect.
+    ///
+    /// This is a completed scan with zero findings, not a failure. The scanner
+    /// writes no JSON in this case, so the raw report is empty.
+    no_package_sources: bool,
 }
 
 impl ScannerReport {
@@ -84,9 +118,12 @@ impl ScannerReport {
     ///
     /// Returns an error when the scanner schema is malformed or unsupported.
     pub fn normalize(&self, artifact: &RawArtifact) -> Result<Vec<Finding>> {
+        if self.no_package_sources {
+            return Ok(Vec::new());
+        }
         let mut findings = match self.scanner {
-            ScannerKind::Trivy => normalize_trivy(&self.raw_json)?,
-            ScannerKind::OsvScanner => normalize_osv(&self.raw_json)?,
+            ScannerKind::Trivy => normalize_trivy(&self.raw_json, &self.repository_root)?,
+            ScannerKind::OsvScanner => normalize_osv(&self.raw_json, &self.repository_root)?,
         };
         for finding in &mut findings {
             finding.raw_artifact_digests = vec![artifact.digest.clone()];
@@ -120,10 +157,7 @@ impl ScannerRunner {
     /// Returns an error for launch failures, timeouts, excessive output,
     /// scanner failures, or malformed JSON.
     pub async fn run(&self, scanner: ScannerKind, repository: &Path) -> Result<ScannerReport> {
-        let executable = match scanner {
-            ScannerKind::Trivy => &self.config.trivy_executable,
-            ScannerKind::OsvScanner => &self.config.osv_executable,
-        };
+        let executable = self.executable(scanner);
         let mut command = Command::new(executable);
         match scanner {
             ScannerKind::Trivy => {
@@ -148,76 +182,208 @@ impl ScannerRunner {
                 ]);
             }
         }
-        command
-            .arg(repository)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+        command.arg(repository);
 
-        let mut child = command
-            .spawn()
-            .map_err(|source| LaunchGuardError::ScannerUnavailable {
-                scanner: scanner.as_str(),
-                executable: executable.clone(),
-                source,
-            })?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| report_error(scanner, "stdout pipe unavailable"))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| report_error(scanner, "stderr pipe unavailable"))?;
-        let stdout_task = tokio::spawn(read_bounded(
-            stdout,
-            scanner,
-            "stdout",
-            self.limits.max_stdout_bytes,
-        ));
-        let stderr_task = tokio::spawn(read_bounded(
-            stderr,
-            scanner,
-            "stderr",
-            self.limits.max_stderr_bytes,
-        ));
-
-        let status = if let Ok(status) = timeout(self.limits.timeout, child.wait()).await {
-            status?
-        } else {
-            let _ = child.kill().await;
-            let _ = stdout_task.await;
-            let _ = stderr_task.await;
-            return Err(LaunchGuardError::ScannerTimeout {
-                scanner: scanner.as_str(),
-                timeout_seconds: self.limits.timeout.as_secs(),
-            });
-        };
-        let raw_json = stdout_task.await??;
-        let stderr = stderr_task.await??;
-        let accepted =
-            status.success() || (scanner == ScannerKind::OsvScanner && status.code() == Some(1));
+        let output = run_bounded(command, scanner, executable, &self.limits).await?;
+        // OSV-Scanner signals findings and an empty workspace through its exit
+        // status rather than its report, and writes no JSON for the latter.
+        let osv_status = (scanner == ScannerKind::OsvScanner)
+            .then(|| output.status.code())
+            .flatten();
+        let no_package_sources = osv_status == Some(OSV_NO_PACKAGE_SOURCES);
+        let accepted = output.status.success()
+            || no_package_sources
+            || osv_status == Some(OSV_VULNERABILITIES_FOUND);
         if !accepted {
-            return Err(LaunchGuardError::ScannerFailed {
-                scanner: scanner.as_str(),
-                status: status
-                    .code()
-                    .map_or_else(|| "terminated".to_owned(), |code| code.to_string()),
-                message: String::from_utf8_lossy(&stderr).trim().to_owned(),
-            });
+            return Err(output.into_failure(scanner));
         }
 
-        match scanner {
-            ScannerKind::Trivy => {
-                normalize_trivy(&raw_json)?;
-            }
-            ScannerKind::OsvScanner => {
-                normalize_osv(&raw_json)?;
+        let raw_json = output.stdout;
+        if !no_package_sources {
+            match scanner {
+                ScannerKind::Trivy => {
+                    normalize_trivy(&raw_json, repository)?;
+                }
+                ScannerKind::OsvScanner => {
+                    normalize_osv(&raw_json, repository)?;
+                }
             }
         }
-        Ok(ScannerReport { scanner, raw_json })
+        Ok(ScannerReport {
+            scanner,
+            raw_json,
+            repository_root: repository.to_path_buf(),
+            no_package_sources,
+        })
     }
+
+    /// Record the scanner build and vulnerability database backing a run.
+    ///
+    /// This executes only the scanner's own version subcommand. It never
+    /// touches repository content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for launch failures, timeouts, a failure status, or
+    /// output the scanner contract does not describe.
+    pub async fn provenance(&self, scanner: ScannerKind) -> Result<ScannerProvenance> {
+        let executable = self.executable(scanner);
+        let mut command = Command::new(executable);
+        match scanner {
+            ScannerKind::Trivy => command.args(["version", "--format", "json"]),
+            ScannerKind::OsvScanner => command.arg("--version"),
+        };
+        let limits = ScannerLimits {
+            timeout: self.limits.timeout.min(Duration::from_mins(1)),
+            max_stdout_bytes: self.limits.max_stdout_bytes.min(1024 * 1024),
+            max_stderr_bytes: self.limits.max_stderr_bytes,
+        };
+        let output = run_bounded(command, scanner, executable, &limits).await?;
+        if !output.status.success() {
+            return Err(output.into_failure(scanner));
+        }
+        match scanner {
+            ScannerKind::Trivy => parse_trivy_version(&output.stdout),
+            ScannerKind::OsvScanner => parse_osv_version(&output.stdout),
+        }
+    }
+
+    const fn executable(&self, scanner: ScannerKind) -> &PathBuf {
+        match scanner {
+            ScannerKind::Trivy => &self.config.trivy_executable,
+            ScannerKind::OsvScanner => &self.config.osv_executable,
+        }
+    }
+}
+
+/// Bounded output of a completed trusted process.
+struct ProcessOutput {
+    status: std::process::ExitStatus,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+impl ProcessOutput {
+    fn into_failure(self, scanner: ScannerKind) -> LaunchGuardError {
+        LaunchGuardError::ScannerFailed {
+            scanner: scanner.as_str(),
+            status: self
+                .status
+                .code()
+                .map_or_else(|| "terminated".to_owned(), |code| code.to_string()),
+            message: String::from_utf8_lossy(&self.stderr).trim().to_owned(),
+        }
+    }
+}
+
+/// Run a trusted executable without a shell, bounding output and wall-clock time.
+async fn run_bounded(
+    mut command: Command,
+    scanner: ScannerKind,
+    executable: &Path,
+    limits: &ScannerLimits,
+) -> Result<ProcessOutput> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = command
+        .spawn()
+        .map_err(|source| LaunchGuardError::ScannerUnavailable {
+            scanner: scanner.as_str(),
+            executable: executable.to_path_buf(),
+            source,
+        })?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| report_error(scanner, "stdout pipe unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| report_error(scanner, "stderr pipe unavailable"))?;
+    let stdout_task = tokio::spawn(read_bounded(
+        stdout,
+        scanner,
+        "stdout",
+        limits.max_stdout_bytes,
+    ));
+    let stderr_task = tokio::spawn(read_bounded(
+        stderr,
+        scanner,
+        "stderr",
+        limits.max_stderr_bytes,
+    ));
+
+    let status = if let Ok(status) = timeout(limits.timeout, child.wait()).await {
+        status?
+    } else {
+        let _ = child.kill().await;
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+        return Err(LaunchGuardError::ScannerTimeout {
+            scanner: scanner.as_str(),
+            timeout_seconds: limits.timeout.as_secs(),
+        });
+    };
+    Ok(ProcessOutput {
+        status,
+        stdout: stdout_task.await??,
+        stderr: stderr_task.await??,
+    })
+}
+
+/// Parse `trivy version --format json`.
+///
+/// `VulnerabilityDB` is absent until Trivy has downloaded its database, so the
+/// database fields stay optional rather than being invented.
+fn parse_trivy_version(stdout: &[u8]) -> Result<ScannerProvenance> {
+    let report: Value = serde_json::from_slice(stdout)?;
+    let version = owned_string_at(&report, "Version")
+        .ok_or_else(|| report_error(ScannerKind::Trivy, "version report has no Version"))?;
+    let database = report.get("VulnerabilityDB");
+    Ok(ScannerProvenance {
+        schema_version: SCANNER_PROVENANCE_SCHEMA_VERSION.to_owned(),
+        scanner: ScannerKind::Trivy,
+        version,
+        vulnerability_database_version: database.and_then(|value| value.get("Version")).and_then(
+            |value| match value {
+                Value::Number(number) => Some(number.to_string()),
+                Value::String(text) if !text.is_empty() => Some(text.clone()),
+                _ => None,
+            },
+        ),
+        vulnerability_database_updated_at: database
+            .and_then(|value| owned_string_at(value, "UpdatedAt")),
+    })
+}
+
+/// Parse the `osv-scanner --version` text banner.
+///
+/// OSV-Scanner matches against the upstream OSV database rather than a local
+/// database file, so it reports no database version to record.
+fn parse_osv_version(stdout: &[u8]) -> Result<ScannerProvenance> {
+    let text = String::from_utf8_lossy(stdout);
+    let version = text
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("osv-scanner version:"))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            report_error(
+                ScannerKind::OsvScanner,
+                "version banner has no osv-scanner version line",
+            )
+        })?;
+    Ok(ScannerProvenance {
+        schema_version: SCANNER_PROVENANCE_SCHEMA_VERSION.to_owned(),
+        scanner: ScannerKind::OsvScanner,
+        version: version.to_owned(),
+        vulnerability_database_version: None,
+        vulnerability_database_updated_at: None,
+    })
 }
 
 impl Default for ScannerRunner {
@@ -255,12 +421,14 @@ where
 
 /// Normalize a Trivy JSON schema version 2 report.
 ///
-/// Secret match and source-code fields are deliberately ignored.
+/// Secret match and source-code fields are deliberately ignored. Reported
+/// paths are rewritten relative to `repository_root` so findings for the same
+/// artifact carry the same location regardless of which scanner saw it.
 ///
 /// # Errors
 ///
 /// Returns an error for malformed JSON or an unsupported schema version.
-pub fn normalize_trivy(bytes: &[u8]) -> Result<Vec<Finding>> {
+pub fn normalize_trivy(bytes: &[u8], repository_root: &Path) -> Result<Vec<Finding>> {
     let report: Value = serde_json::from_slice(bytes)?;
     if report.get("SchemaVersion").and_then(Value::as_u64) != Some(2) {
         return Err(report_error(
@@ -268,13 +436,22 @@ pub fn normalize_trivy(bytes: &[u8]) -> Result<Vec<Finding>> {
             "expected JSON SchemaVersion 2",
         ));
     }
-    let results = report
-        .get("Results")
-        .and_then(Value::as_array)
-        .ok_or_else(|| report_error(ScannerKind::Trivy, "missing Results array"))?;
+    // Trivy omits Results entirely when a scan produces no findings. That is a
+    // clean scan, not a malformed report; only a present non-array is invalid.
+    let results = match report.get("Results") {
+        None | Some(Value::Null) => &[][..],
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| report_error(ScannerKind::Trivy, "Results is not an array"))?,
+    };
     let mut findings = Vec::new();
     for result in results {
-        let target = string_at(result, "Target").unwrap_or_default();
+        let target = relative_path(
+            string_at(result, "Target").unwrap_or_default(),
+            repository_root,
+        );
+        let target = target.as_str();
         for vulnerability in array_at(result, "Vulnerabilities") {
             let identifier = string_at(vulnerability, "VulnerabilityID");
             let package_name = string_at(vulnerability, "PkgName").unwrap_or("unknown");
@@ -372,10 +549,14 @@ pub fn normalize_trivy(bytes: &[u8]) -> Result<Vec<Finding>> {
 
 /// Normalize an OSV-Scanner v2 source-scan JSON report.
 ///
+/// OSV-Scanner reports the absolute path it was given. Paths are rewritten
+/// relative to `repository_root` so a dependency vulnerability seen by both
+/// scanners produces one fingerprint instead of two.
+///
 /// # Errors
 ///
 /// Returns an error for malformed JSON or a missing `results` contract.
-pub fn normalize_osv(bytes: &[u8]) -> Result<Vec<Finding>> {
+pub fn normalize_osv(bytes: &[u8], repository_root: &Path) -> Result<Vec<Finding>> {
     let report: Value = serde_json::from_slice(bytes)?;
     let results = report
         .get("results")
@@ -383,10 +564,14 @@ pub fn normalize_osv(bytes: &[u8]) -> Result<Vec<Finding>> {
         .ok_or_else(|| report_error(ScannerKind::OsvScanner, "missing results array"))?;
     let mut findings = Vec::new();
     for result in results {
-        let source_path = result
-            .get("source")
-            .and_then(|source| string_at(source, "path"))
-            .unwrap_or_default();
+        let source_path = relative_path(
+            result
+                .get("source")
+                .and_then(|source| string_at(source, "path"))
+                .unwrap_or_default(),
+            repository_root,
+        );
+        let source_path = source_path.as_str();
         let alias_groups = alias_groups(result);
         for package_entry in array_at(result, "packages") {
             let package_value = package_entry.get("package").unwrap_or(&Value::Null);
@@ -667,6 +852,32 @@ fn first_csv_value(value: Option<&str>) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Rewrite a scanner-reported path as a repository-relative path.
+///
+/// Trivy reports paths relative to the scan root while OSV-Scanner echoes the
+/// absolute path it was given. Public records use repository-relative paths,
+/// and fingerprints hash the location, so both must agree.
+fn relative_path(path: &str, repository_root: &Path) -> String {
+    let path = path.replace('\\', "/");
+    let root = repository_root.to_string_lossy().replace('\\', "/");
+    let root = root.trim_end_matches('/');
+    if root.is_empty() {
+        return path;
+    }
+    let Some(remainder) = path.strip_prefix(root) else {
+        return path;
+    };
+    // Only strip a whole path segment, never a partial directory name.
+    if remainder.is_empty() {
+        return ".".to_owned();
+    }
+    match remainder.strip_prefix('/') {
+        Some(relative) if !relative.is_empty() => relative.to_owned(),
+        Some(_) => ".".to_owned(),
+        None => path,
+    }
+}
+
 fn location(path: &str, start_line: Option<u64>, end_line: Option<u64>) -> Option<FindingLocation> {
     if path.is_empty() && start_line.is_none() && end_line.is_none() {
         None
@@ -731,5 +942,89 @@ fn smaller_number(left: Option<u64>, right: Option<u64>) -> Option<u64> {
         (Some(left), Some(right)) => Some(left.min(right)),
         (Some(value), None) | (None, Some(value)) => Some(value),
         (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{parse_osv_version, parse_trivy_version, relative_path};
+    use crate::ScannerKind;
+
+    #[test]
+    fn absolute_scanner_paths_become_repository_relative() {
+        let root = Path::new("/tmp/checkout");
+        assert_eq!(
+            relative_path("/tmp/checkout/package-lock.json", root),
+            "package-lock.json"
+        );
+        assert_eq!(
+            relative_path("/tmp/checkout/api/pyproject.toml", root),
+            "api/pyproject.toml"
+        );
+        assert_eq!(relative_path("/tmp/checkout", root), ".");
+        assert_eq!(relative_path("/tmp/checkout/", root), ".");
+    }
+
+    #[test]
+    fn already_relative_paths_are_unchanged() {
+        let root = Path::new("/tmp/checkout");
+        assert_eq!(
+            relative_path("package-lock.json", root),
+            "package-lock.json"
+        );
+        assert_eq!(relative_path("src/config.ts", root), "src/config.ts");
+    }
+
+    #[test]
+    fn a_sibling_directory_sharing_a_prefix_is_not_stripped() {
+        let root = Path::new("/tmp/checkout");
+        assert_eq!(
+            relative_path("/tmp/checkout-backup/package-lock.json", root),
+            "/tmp/checkout-backup/package-lock.json"
+        );
+    }
+
+    #[test]
+    fn trivy_version_without_a_downloaded_database_reports_no_database() {
+        let provenance = parse_trivy_version(br#"{"Version":"0.72.0"}"#).expect("parse version");
+        assert_eq!(provenance.scanner, ScannerKind::Trivy);
+        assert_eq!(provenance.version, "0.72.0");
+        assert_eq!(provenance.vulnerability_database_version, None);
+        assert_eq!(provenance.vulnerability_database_updated_at, None);
+    }
+
+    #[test]
+    fn trivy_version_records_the_vulnerability_database() {
+        let provenance = parse_trivy_version(
+            br#"{"Version":"0.72.0","VulnerabilityDB":{"Version":2,"UpdatedAt":"2026-07-27T06:11:32Z"}}"#,
+        )
+        .expect("parse version");
+        assert_eq!(
+            provenance.vulnerability_database_version.as_deref(),
+            Some("2")
+        );
+        assert_eq!(
+            provenance.vulnerability_database_updated_at.as_deref(),
+            Some("2026-07-27T06:11:32Z")
+        );
+    }
+
+    #[test]
+    fn osv_version_banner_is_parsed() {
+        let provenance = parse_osv_version(
+            b"osv-scanner version: 2.4.0\nosv-scalibr version: 0.4.5\ncommit: abc\n",
+        )
+        .expect("parse banner");
+        assert_eq!(provenance.scanner, ScannerKind::OsvScanner);
+        assert_eq!(provenance.version, "2.4.0");
+        assert_eq!(provenance.vulnerability_database_version, None);
+    }
+
+    #[test]
+    fn unrecognized_version_output_fails_closed() {
+        assert!(parse_trivy_version(b"not json").is_err());
+        assert!(parse_osv_version(b"some other tool v1\n").is_err());
     }
 }

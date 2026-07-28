@@ -28,8 +28,8 @@ async fn generated_phase_two_records_validate_against_bundled_schemas() {
         .inspect(&repository)
         .expect("inspect fixture");
     let plan = PlanGenerator.generate(&profile).expect("generate plan");
-    let findings =
-        normalize_trivy(include_bytes!("scanner/trivy.json")).expect("normalize security fixture");
+    let findings = normalize_trivy(include_bytes!("scanner/trivy.json"), fixture.path())
+        .expect("normalize security fixture");
     let assessment = ReadinessEngine
         .assess(
             &profile,

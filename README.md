@@ -7,8 +7,9 @@
 projects.**
 
 > [!IMPORTANT]
-> Phase 1 is a read-only detector, not a security scanner or deployment tool.
-> It does not build, test, install, repair, or deploy repository code.
+> Phases 1 and 2 audit and plan only. LaunchGuard reports what trusted scanners
+> found and what it proposes to run. It does not build, test, install, repair,
+> or deploy repository code, and it never claims a project is secure.
 
 LaunchGuard will inspect a local repository or GitHub URL, determine how the
 project is built, normalize security findings, test it in an isolated
@@ -78,18 +79,21 @@ flowchart LR
 The Rust engine is interface-agnostic. Tauri and the CLI consume the same
 typed events and operations rather than implementing separate workflows.
 
-## Phase 1 quick start
+## Quick start
 
-Phase 1 requires Rust 1.97.1. The repository pins the toolchain and commits its
-dependency lockfile.
+LaunchGuard requires Rust 1.97.1. The repository pins the toolchain and commits
+its dependency lockfile. Trivy and OSV-Scanner are optional; a missing scanner
+degrades coverage instead of failing the run.
 
 ```bash
 cargo build --locked
 cargo run --locked -- audit ./path/to/project --format json
+cargo run --locked -- audit ./path/to/project --scanner trivy --scanner osv-scanner
 cargo run --locked -- audit https://github.com/owner/public-repository
+cargo run --locked -- plan ./path/to/project --format markdown
 cargo run --locked -- history
 cargo run --locked -- status <run-id> --format markdown
-cargo run --locked -- schema
+cargo run --locked -- schema execution-plan
 ```
 
 The `audit` command:
@@ -97,17 +101,26 @@ The `audit` command:
 - Accepts a local directory or root URL for a public GitHub repository.
 - Detects React/Vite, Next.js, FastAPI, and Rust/Axum.
 - Reports competing supported classifications as `needs_confirmation`.
-- Emits evidence-backed `ProjectProfile` v1 records as JSON or Markdown.
-- Records immutable local run history in SQLite unless `--no-history` is used.
+- Runs the trusted scanners you select, without a shell and with bounded output.
+- Normalizes findings into one schema with stable, scanner-neutral fingerprints.
+- Keeps raw scanner reports in a private, content-addressed local store.
+- Generates a content-addressed execution plan that requires approval.
+- Scores readiness deterministically, with no model involved.
+- Records the whole run in SQLite unless `--no-history` is used.
 - Writes structured diagnostics to standard error, preserving JSON on standard
   output.
 
-Set `LAUNCHGUARD_DATABASE` or pass `--database` to choose the history file.
+The `plan` command generates and prints a reviewed execution plan without
+running scanners or project code.
+
+Set `LAUNCHGUARD_DATABASE` or pass `--database` to choose the history file, and
+`LAUNCHGUARD_TRIVY` or `LAUNCHGUARD_OSV_SCANNER` to pin scanner executables.
 Only environment variable names are collected; values from `.env` files are
 never read.
 
-See the [Phase 1 implementation guide](docs/PHASE_1.md) for detector contracts,
-limits, architecture, and known limitations.
+See the [Phase 1](docs/PHASE_1.md) and [Phase 2](docs/PHASE_2.md)
+implementation guides for detector contracts, scanner behavior, plan templates,
+scoring, limits, and known limitations.
 
 ## Autonomy boundary
 
@@ -146,17 +159,31 @@ The detailed contract is in
 - [System requirements and cost model](docs/SYSTEM_REQUIREMENTS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Phase 1 implementation](docs/PHASE_1.md)
+- [Phase 2 implementation](docs/PHASE_2.md)
 - [ProjectProfile v1 JSON Schema](schemas/project-profile-v1.schema.json)
+- [Finding v1 JSON Schema](schemas/finding-v1.schema.json)
+- [ExecutionPlan v1 JSON Schema](schemas/execution-plan-v1.schema.json)
+- [ReadinessAssessment v1 JSON Schema](schemas/readiness-assessment-v1.schema.json)
+- [Degradation v1 JSON Schema](schemas/degradation-v1.schema.json)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status
 
-Phase 1 is complete. The checked-in synthetic corpus contains 40 supported
-fixtures and seven fail-closed safety fixtures; the measured classification
-result is 40/40. See the
-[Phase 1 evaluation report](docs/evaluation/phase-1.md) for the environment,
-raw counts, security audit, smoke checks, and limitations. Phase 2 security
-normalization and deterministic planning are next.
+Phases 1 and 2 are complete.
+
+Phase 1 classified 40 of 40 supported fixtures correctly and failed closed on
+all seven safety fixtures. See the
+[Phase 1 evaluation report](docs/evaluation/phase-1.md).
+
+Phase 2 produced a schema-valid execution plan for 40 of 40 supported fixtures
+with Trivy 0.72.0 and OSV-Scanner 2.4.0 running for real, reproduced every plan
+and assessment digest across repeated runs, and refused to plan an ambiguous
+project. See the [Phase 2 evaluation report](docs/evaluation/phase-2.md) for
+the environment, raw counts, smoke checks, the four defects that real scanner
+runs exposed, and limitations.
+
+Phase 3 cross-platform isolated preview is next. No LaunchGuard release has yet
+executed a project command.
 
 ## License
 

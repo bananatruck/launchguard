@@ -1,18 +1,21 @@
 //! `LaunchGuard` command-line interface.
 
-use std::{fmt::Write as _, path::PathBuf};
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
 use launchguard_core::{
-    ArtifactStore, DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON, ExecutionPlan,
-    FINDING_SCHEMA_JSON, Finding, HistoryEntry, HistoryStore, PROJECT_PROFILE_SCHEMA_JSON,
-    PlanGenerator, ProjectProfile, RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON, RawArtifact,
-    ReadinessAssessment, ReadinessEngine, RepositoryAcquirer, ScannerKind, ScannerRunner,
-    merge_findings,
+    ArtifactStore, DEGRADATION_SCHEMA_JSON, Degradation, DetectionEngine, DetectionStatus,
+    EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, Finding, HistoryEntry, HistoryStore,
+    PROJECT_PROFILE_SCHEMA_JSON, PlanGenerator, ProjectProfile, RAW_ARTIFACT_SCHEMA_VERSION,
+    READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord,
+    ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance, ScannerRunner, merge_findings,
 };
-use serde_json::json;
+use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -62,6 +65,14 @@ enum Command {
         /// Content-addressed directory for sensitive raw scanner reports.
         #[arg(long)]
         artifact_directory: Option<PathBuf>,
+
+        /// Trivy executable. A missing scanner degrades coverage instead of failing.
+        #[arg(long, env = "LAUNCHGUARD_TRIVY", default_value = "trivy")]
+        trivy_executable: PathBuf,
+
+        /// OSV-Scanner executable. A missing scanner degrades coverage instead of failing.
+        #[arg(long, env = "LAUNCHGUARD_OSV_SCANNER", default_value = "osv-scanner")]
+        osv_executable: PathBuf,
     },
 
     /// Generate a reviewed execution plan without running scanners or project code.
@@ -136,6 +147,7 @@ enum SchemaRecord {
     Finding,
     ExecutionPlan,
     ReadinessAssessment,
+    Degradation,
 }
 
 #[tokio::main]
@@ -151,6 +163,8 @@ async fn main() -> Result<()> {
             no_history,
             scanner,
             artifact_directory,
+            trivy_executable,
+            osv_executable,
         } => {
             let artifact_directory = artifact_directory.map_or_else(default_artifact_path, Ok)?;
             audit(
@@ -160,6 +174,10 @@ async fn main() -> Result<()> {
                 &database_path,
                 &artifact_directory,
                 &scanner,
+                ScannerConfig {
+                    trivy_executable,
+                    osv_executable,
+                },
             )
             .await
         }
@@ -180,6 +198,7 @@ async fn main() -> Result<()> {
                 SchemaRecord::Finding => FINDING_SCHEMA_JSON,
                 SchemaRecord::ExecutionPlan => EXECUTION_PLAN_SCHEMA_JSON,
                 SchemaRecord::ReadinessAssessment => READINESS_SCHEMA_JSON,
+                SchemaRecord::Degradation => DEGRADATION_SCHEMA_JSON,
             };
             println!("{schema}");
             Ok(())
@@ -194,6 +213,7 @@ async fn audit(
     database_path: &PathBuf,
     artifact_directory: &PathBuf,
     selected_scanners: &[ScannerSelection],
+    scanner_config: ScannerConfig,
 ) -> Result<()> {
     let repository = RepositoryAcquirer::new()?
         .acquire(source)
@@ -202,55 +222,115 @@ async fn audit(
     let profile = DetectionEngine::default()
         .inspect(&repository)
         .with_context(|| format!("failed to inspect {source}"))?;
+
+    let mut degradations = Vec::new();
     let plan = if profile.status == DetectionStatus::Detected {
-        Some(
-            PlanGenerator
-                .generate(&profile)
-                .context("failed to generate reviewed execution plan")?,
-        )
+        match PlanGenerator.generate(&profile) {
+            Ok(plan) => Some(plan),
+            Err(error) => {
+                warn!(reason = %error, "continuing without a reviewed execution plan");
+                degradations.push(Degradation::plan_unavailable(&error));
+                None
+            }
+        }
     } else {
         None
     };
+
     let mut scanners = selected_scanners.to_vec();
     scanners.sort_unstable();
     scanners.dedup();
-    let runner = ScannerRunner::default();
+    let runner = ScannerRunner::new(scanner_config, ScannerLimits::default());
     let store = ArtifactStore::new(artifact_directory);
     let mut artifacts = Vec::new();
     let mut findings = Vec::new();
     let mut completed_scanners = Vec::new();
+    let mut scanner_provenance = Vec::new();
     for selected in scanners {
         let scanner = ScannerKind::from(selected);
-        let report = runner
-            .run(scanner, repository.root())
-            .await
-            .with_context(|| format!("{} scan failed", scanner.as_str()))?;
-        let artifact = report
-            .persist(&store)
-            .with_context(|| format!("failed to persist {} report", scanner.as_str()))?;
-        findings.extend(report.normalize(&artifact)?);
-        artifacts.push(artifact);
-        completed_scanners.push(scanner);
+        match scan(&runner, &store, scanner, repository.root()).await {
+            Ok(completed) => {
+                findings.extend(completed.findings);
+                artifacts.push(completed.artifact);
+                scanner_provenance.extend(completed.provenance);
+                completed_scanners.push(scanner);
+            }
+            Err(degradation) => {
+                warn!(
+                    scanner = scanner.as_str(),
+                    kind = degradation.kind.as_str(),
+                    reason = degradation.detail.as_str(),
+                    "continuing with degraded security coverage"
+                );
+                degradations.push(degradation);
+            }
+        }
     }
+
     let findings = merge_findings(findings);
     let readiness = ReadinessEngine
         .assess(&profile, &findings, &completed_scanners, plan.as_ref())
         .context("failed to calculate readiness")?;
+    let record = RunRecord {
+        profile,
+        plan,
+        findings,
+        readiness: Some(readiness),
+        degradations,
+        scanner_provenance,
+        artifacts,
+    };
 
     let run_id = if no_history {
         None
     } else {
-        Some(HistoryStore::open(database_path)?.record(&profile)?.run_id)
+        Some(HistoryStore::open(database_path)?.record(&record)?.run_id)
     };
-    print_audit(
-        &profile,
-        run_id,
-        plan.as_ref(),
-        &findings,
-        &artifacts,
-        &readiness,
-        format,
-    )
+    print_report(&record, run_id, format)
+}
+
+/// One scanner that completed, persisted, and normalized successfully.
+struct CompletedScan {
+    findings: Vec<Finding>,
+    artifact: RawArtifact,
+    provenance: Option<ScannerProvenance>,
+}
+
+/// Run one scanner, converting any failure into a typed degradation.
+///
+/// A scanner that cannot run reduces coverage; it does not end the audit.
+async fn scan(
+    runner: &ScannerRunner,
+    store: &ArtifactStore,
+    scanner: ScannerKind,
+    repository: &Path,
+) -> std::result::Result<CompletedScan, Degradation> {
+    let report = runner
+        .run(scanner, repository)
+        .await
+        .map_err(|error| Degradation::from_scanner_error(scanner, &error))?;
+    let artifact = report
+        .persist(store)
+        .map_err(|error| Degradation::artifact_not_stored(scanner, &error))?;
+    let findings = report
+        .normalize(&artifact)
+        .map_err(|error| Degradation::from_scanner_error(scanner, &error))?;
+    let provenance = match runner.provenance(scanner).await {
+        Ok(provenance) => Some(provenance),
+        Err(error) => {
+            warn!(
+                scanner = scanner.as_str(),
+                reason = %error,
+                "scanner version is unavailable; the report cannot cite a scanner or database version"
+            );
+            None
+        }
+    };
+    Ok(CompletedScan {
+        findings,
+        artifact,
+        provenance,
+    })
 }
 
 async fn plan(source: &str, format: OutputFormat) -> Result<()> {
@@ -267,22 +347,16 @@ async fn plan(source: &str, format: OutputFormat) -> Result<()> {
     let readiness = ReadinessEngine
         .assess(&profile, &[], &[], Some(&plan))
         .context("failed to calculate readiness")?;
-    match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "profile": profile,
-                    "plan": plan,
-                    "readiness": readiness,
-                }))?
-            );
-        }
-        OutputFormat::Markdown => {
-            println!("{}", plan_markdown(&profile, &plan, &readiness));
-        }
-    }
-    Ok(())
+    let record = RunRecord {
+        profile,
+        plan: Some(plan),
+        findings: Vec::new(),
+        readiness: Some(readiness),
+        degradations: Vec::new(),
+        scanner_provenance: Vec::new(),
+        artifacts: Vec::new(),
+    };
+    print_report(&record, None, format)
 }
 
 fn print_entry(entry: &HistoryEntry, format: OutputFormat) -> Result<()> {
@@ -291,67 +365,56 @@ fn print_entry(entry: &HistoryEntry, format: OutputFormat) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(entry)?);
         }
         OutputFormat::Markdown => {
-            println!("{}", profile_markdown(&entry.profile, Some(entry.run_id)));
+            println!("{}", report_markdown(&entry.record, Some(entry.run_id)));
         }
     }
     Ok(())
 }
 
-fn print_audit(
-    profile: &ProjectProfile,
-    run_id: Option<Uuid>,
-    plan: Option<&ExecutionPlan>,
-    findings: &[Finding],
-    artifacts: &[RawArtifact],
-    readiness: &ReadinessAssessment,
-    format: OutputFormat,
-) -> Result<()> {
+fn print_report(record: &RunRecord, run_id: Option<Uuid>, format: OutputFormat) -> Result<()> {
     match format {
         OutputFormat::Json => {
-            let output = json!({
-                "run_id": run_id,
-                "profile": profile,
-                "plan": plan,
-                "findings": findings,
-                "artifacts": artifacts,
-                "readiness": readiness,
-            });
+            let mut output = serde_json::to_value(record)?;
+            if let Some(object) = output.as_object_mut() {
+                object.insert("run_id".to_owned(), serde_json::to_value(run_id)?);
+            }
             println!("{}", serde_json::to_string_pretty(&output)?);
         }
-        OutputFormat::Markdown => println!(
-            "{}",
-            audit_markdown(profile, run_id, plan, findings, artifacts, readiness)
-        ),
+        OutputFormat::Markdown => println!("{}", report_markdown(record, run_id)),
     }
     Ok(())
 }
 
-fn audit_markdown(
-    profile: &ProjectProfile,
-    run_id: Option<Uuid>,
-    plan: Option<&ExecutionPlan>,
-    findings: &[Finding],
-    artifacts: &[RawArtifact],
-    readiness: &ReadinessAssessment,
-) -> String {
-    let mut output = profile_markdown(profile, run_id);
+fn report_markdown(record: &RunRecord, run_id: Option<Uuid>) -> String {
+    let mut output = profile_markdown(&record.profile, run_id);
+    append_findings(&mut output, record);
+    append_degradations(&mut output, &record.degradations);
+    append_plan_and_scores(&mut output, record);
+    output
+}
+
+fn append_findings(output: &mut String, record: &RunRecord) {
+    let completed = record
+        .readiness
+        .as_ref()
+        .map_or(0, |readiness| readiness.completed_scanners.len());
     writeln!(output).expect("writing to String cannot fail");
     writeln!(output, "## Security findings").expect("writing to String cannot fail");
     writeln!(output).expect("writing to String cannot fail");
-    if readiness.completed_scanners.is_empty() {
+    if completed == 0 {
         writeln!(
             output,
-            "No scanners were requested. Security readiness is incomplete."
+            "No scanner completed. Security readiness is incomplete."
         )
         .expect("writing to String cannot fail");
-    } else if findings.is_empty() {
+    } else if record.findings.is_empty() {
         writeln!(
             output,
-            "No findings were reported by the completed scanners."
+            "No findings were reported by the completed scanners. This is not evidence that none exist."
         )
         .expect("writing to String cannot fail");
     } else {
-        for finding in findings {
+        for finding in &record.findings {
             writeln!(
                 output,
                 "- `{:?}` / `{:?}` — {} (`{}`)",
@@ -360,14 +423,35 @@ fn audit_markdown(
             .expect("writing to String cannot fail");
         }
     }
-    if !artifacts.is_empty() {
+    if !record.scanner_provenance.is_empty() {
+        writeln!(output).expect("writing to String cannot fail");
+        writeln!(output, "Completed scanners:").expect("writing to String cannot fail");
+        for provenance in &record.scanner_provenance {
+            let database = provenance
+                .vulnerability_database_updated_at
+                .as_deref()
+                .or(provenance.vulnerability_database_version.as_deref())
+                .map_or_else(
+                    || "no local database reported".to_owned(),
+                    |value| format!("database {value}"),
+                );
+            writeln!(
+                output,
+                "- {} {} ({database})",
+                provenance.scanner.as_str(),
+                provenance.version
+            )
+            .expect("writing to String cannot fail");
+        }
+    }
+    if !record.artifacts.is_empty() {
         writeln!(output).expect("writing to String cannot fail");
         writeln!(
             output,
             "Raw reports use artifact schema `{RAW_ARTIFACT_SCHEMA_VERSION}` and remain local:"
         )
         .expect("writing to String cannot fail");
-        for artifact in artifacts {
+        for artifact in &record.artifacts {
             writeln!(
                 output,
                 "- {}: `{}`",
@@ -377,25 +461,35 @@ fn audit_markdown(
             .expect("writing to String cannot fail");
         }
     }
-    append_plan_and_scores(&mut output, plan, readiness);
-    output
 }
 
-fn plan_markdown(
-    profile: &ProjectProfile,
-    plan: &ExecutionPlan,
-    readiness: &ReadinessAssessment,
-) -> String {
-    let mut output = profile_markdown(profile, None);
-    append_plan_and_scores(&mut output, Some(plan), readiness);
-    output
+fn append_degradations(output: &mut String, degradations: &[Degradation]) {
+    if degradations.is_empty() {
+        return;
+    }
+    writeln!(output).expect("writing to String cannot fail");
+    writeln!(output, "## Coverage degradations").expect("writing to String cannot fail");
+    writeln!(output).expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "This run completed with reduced coverage. Treat the result as partial."
+    )
+    .expect("writing to String cannot fail");
+    writeln!(output).expect("writing to String cannot fail");
+    for degradation in degradations {
+        writeln!(
+            output,
+            "- `{}` for `{}`: {}",
+            degradation.kind.as_str(),
+            degradation.subject,
+            degradation.detail
+        )
+        .expect("writing to String cannot fail");
+    }
 }
 
-fn append_plan_and_scores(
-    output: &mut String,
-    plan: Option<&ExecutionPlan>,
-    readiness: &ReadinessAssessment,
-) {
+fn append_plan_and_scores(output: &mut String, record: &RunRecord) {
+    let plan = record.plan.as_ref();
     writeln!(output).expect("writing to String cannot fail");
     writeln!(output, "## Reviewed execution plan").expect("writing to String cannot fail");
     writeln!(output).expect("writing to String cannot fail");
@@ -414,15 +508,23 @@ fn append_plan_and_scores(
             .expect("writing to String cannot fail");
         }
     } else {
-        writeln!(
-            output,
-            "No plan was generated because project classification is not unambiguous."
-        )
-        .expect("writing to String cannot fail");
+        let reason = if record.profile.status == DetectionStatus::Detected {
+            "no reviewed template covers this detected project"
+        } else {
+            "project classification is not unambiguous"
+        };
+        writeln!(output, "No plan was generated because {reason}.")
+            .expect("writing to String cannot fail");
     }
+
+    let Some(readiness) = record.readiness.as_ref() else {
+        return;
+    };
     writeln!(output).expect("writing to String cannot fail");
     writeln!(output, "## Deterministic readiness").expect("writing to String cannot fail");
     writeln!(output).expect("writing to String cannot fail");
+    writeln!(output, "- Policy: `{}`", readiness.policy_version)
+        .expect("writing to String cannot fail");
     writeln!(output, "- Build: {}%", readiness.scores.build.percentage)
         .expect("writing to String cannot fail");
     writeln!(
@@ -464,17 +566,17 @@ fn print_history(entries: &[HistoryEntry], format: OutputFormat) -> Result<()> {
             println!("| Run | Created (UTC) | Status | Framework | Source |");
             println!("| --- | --- | --- | --- | --- |");
             for entry in entries {
-                let framework = entry
-                    .profile
+                let profile = entry.profile();
+                let framework = profile
                     .framework
                     .map_or_else(|| "—".to_owned(), |value| value.to_string());
                 println!(
                     "| `{}` | {} | `{:?}` | {} | `{}` |",
                     entry.run_id,
                     entry.created_at.format("%Y-%m-%d %H:%M:%S"),
-                    entry.profile.status,
+                    profile.status,
                     framework,
-                    escape_table(&entry.profile.source)
+                    escape_table(&profile.source)
                 );
             }
         }

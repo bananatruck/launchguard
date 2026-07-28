@@ -155,7 +155,7 @@ impl ReadinessEngine {
         completed_scanners.dedup();
         let scan_coverage_complete =
             completed_scanners == [ScannerKind::Trivy, ScannerKind::OsvScanner];
-        let findings_digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&findings)?));
+        let findings_digest = findings_digest(&findings)?;
         let critical_vulnerability = findings.iter().any(|finding| {
             finding.category == FindingCategory::Vulnerability
                 && finding.severity == Severity::Critical
@@ -358,6 +358,25 @@ impl ReadinessEngine {
         assessment.reproduction_digest = assessment_digest(&assessment)?;
         Ok(assessment)
     }
+}
+
+/// Hash the deterministic security content of the merged findings.
+///
+/// `raw_artifact_digests` points at stored raw reports, and scanners embed a
+/// per-run report identifier and timestamp, so those digests legitimately
+/// differ between two runs over an unchanged project. Hashing them would make
+/// an otherwise reproducible assessment fail to reproduce. Provenance stays on
+/// each finding; it just does not participate in the digest.
+fn findings_digest(findings: &[Finding]) -> Result<String> {
+    let mut value = serde_json::to_value(findings)?;
+    if let Some(items) = value.as_array_mut() {
+        for item in items.iter_mut() {
+            if let Some(object) = item.as_object_mut() {
+                object.remove("raw_artifact_digests");
+            }
+        }
+    }
+    Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(&value)?)))
 }
 
 fn check(

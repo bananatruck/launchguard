@@ -1,7 +1,7 @@
 # Contributing to LaunchGuard
 
-LaunchGuard is specification-first and now includes its Phase 1 Rust
-implementation. Contributions should make behavior safer, clearer, or more
+LaunchGuard is specification-first and now includes its Phase 1 and Phase 2
+Rust implementation. Contributions should make behavior safer, clearer, or more
 measurable.
 
 ## Documentation changes
