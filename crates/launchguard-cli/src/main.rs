@@ -14,9 +14,10 @@ use launchguard_core::{
     Degradation, DeliveryTrack, DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON,
     FINDING_SCHEMA_JSON, Finding, GENERATED_FILE_SCHEMA_JSON, HistoryEntry, HistoryStore,
     IntentGenerator, PROJECT_PROFILE_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_JSON, PlanGenerator,
-    ProjectProfile, Provider, Provisioner, RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON,
-    RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord, ScannerConfig, ScannerKind,
-    ScannerLimits, ScannerProvenance, ScannerRunner, generate_configuration, merge_findings,
+    ProbeConfig, ProjectProfile, Provider, Provisioner, RAW_ARTIFACT_SCHEMA_VERSION,
+    READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord,
+    ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance, ScannerRunner,
+    generate_configuration, merge_findings,
 };
 use serde_json::json;
 use tracing::warn;
@@ -92,13 +93,13 @@ enum Command {
         #[arg(long)]
         artifact_directory: Option<PathBuf>,
 
-        /// Trivy executable. A missing scanner degrades coverage instead of failing.
-        #[arg(long, env = "LAUNCHGUARD_TRIVY", default_value = "trivy")]
-        trivy_executable: PathBuf,
+        /// Trivy executable. Defaults to a provisioned copy, then PATH.
+        #[arg(long, env = "LAUNCHGUARD_TRIVY")]
+        trivy_executable: Option<PathBuf>,
 
-        /// OSV-Scanner executable. A missing scanner degrades coverage instead of failing.
-        #[arg(long, env = "LAUNCHGUARD_OSV_SCANNER", default_value = "osv-scanner")]
-        osv_executable: PathBuf,
+        /// OSV-Scanner executable. Defaults to a provisioned copy, then PATH.
+        #[arg(long, env = "LAUNCHGUARD_OSV_SCANNER")]
+        osv_executable: Option<PathBuf>,
     },
 
     /// Choose a provider and generate deployment configuration. No credentials.
@@ -241,6 +242,7 @@ async fn main() -> Result<()> {
             osv_executable,
         } => {
             let artifact_directory = artifact_directory.map_or_else(default_artifact_path, Ok)?;
+            let tools = default_tool_path()?;
             audit(
                 &source,
                 format,
@@ -249,8 +251,10 @@ async fn main() -> Result<()> {
                 &artifact_directory,
                 &scanner,
                 ScannerConfig {
-                    trivy_executable,
-                    osv_executable,
+                    trivy_executable: trivy_executable
+                        .unwrap_or_else(|| resolve_scanner(CapabilityKind::Trivy, &tools)),
+                    osv_executable: osv_executable
+                        .unwrap_or_else(|| resolve_scanner(CapabilityKind::OsvScanner, &tools)),
                 },
             )
             .await
@@ -378,10 +382,15 @@ async fn audit(
 /// Discovery never blocks, installs, or mutates the host. A missing capability
 /// is an outcome to report, not a reason to refuse work.
 async fn doctor(format: OutputFormat) -> Result<()> {
-    let report = CapabilityProbe::default()
-        .detect()
-        .await
-        .context("failed to probe host capability")?;
+    let tools = default_tool_path()?;
+    let report = CapabilityProbe::new(ProbeConfig {
+        trivy_executable: resolve_scanner(CapabilityKind::Trivy, &tools),
+        osv_executable: resolve_scanner(CapabilityKind::OsvScanner, &tools),
+        ..ProbeConfig::default()
+    })
+    .detect()
+    .await
+    .context("failed to probe host capability")?;
     match format {
         OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         OutputFormat::Markdown => println!("{}", capability_markdown(&report)),
@@ -1034,6 +1043,24 @@ fn default_database_path() -> Result<PathBuf> {
     let project_dirs = ProjectDirs::from("dev", "LaunchGuard", "LaunchGuard")
         .ok_or_else(|| anyhow!("could not determine the user data directory"))?;
     Ok(project_dirs.data_local_dir().join("history.sqlite3"))
+}
+
+/// Resolve a scanner: a copy we provisioned first, then whatever is on `PATH`.
+///
+/// A provisioned binary wins because its exact version and digest are known,
+/// which is what lets a report name the scanner that produced it. An explicit
+/// flag or environment variable overrides both.
+fn resolve_scanner(kind: CapabilityKind, tool_directory: &Path) -> PathBuf {
+    let fallback = || {
+        PathBuf::from(match kind {
+            CapabilityKind::Trivy => "trivy",
+            _ => "osv-scanner",
+        })
+    };
+    Provisioner::new(tool_directory)
+        .executable_path(kind)
+        .filter(|path| path.is_file())
+        .unwrap_or_else(fallback)
 }
 
 fn default_tool_path() -> Result<PathBuf> {

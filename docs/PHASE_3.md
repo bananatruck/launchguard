@@ -166,6 +166,13 @@ targets on tag push and publishes archives with a `SHA256SUMS` manifest.
 it against the published digest, and refuses to install on a mismatch. It is
 short enough to read before piping to a shell, which is the point.
 
+A provisioned tool is discovered automatically. `doctor` and `audit` resolve a
+copy `setup` installed before falling back to `PATH`, so the three commands
+compose without flags or environment variables. A provisioned binary wins
+because its exact version and digest are known, which is what lets a report name
+the scanner that produced it; an explicit flag or environment variable overrides
+both.
+
 Remaining in this phase:
 
 - Cutting the first tagged release, so the install script has something to fetch.
@@ -173,7 +180,10 @@ Remaining in this phase:
 - Threading the capability report through `RunRecord` so a stored run states
   which capabilities were present when it was produced.
 - A Trivy Windows artifact, which ships as a zip this release does not unpack.
-  Windows is reported unsupported for Trivy rather than resolved another way.
+  Windows is reported unsupported for Trivy rather than resolved another way,
+  which means a Windows host cannot reach complete scanner coverage through
+  `setup` alone and will report reduced coverage until Trivy is installed by
+  other means.
 
 ## Exit criteria
 
