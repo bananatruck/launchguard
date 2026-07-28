@@ -54,6 +54,9 @@ not silently select a runtime.
   where applicable.
 - Auditable deployment record.
 - User-approved Git branch and pull request.
+- Host capability report and provisioning result.
+- Deployment intent with provider free-tier limits.
+- Local deployment summary artifact.
 
 ### 3.3 Non-goals
 
@@ -66,6 +69,20 @@ not silently select a runtime.
 - Replacing a security review or penetration test.
 
 ## 4. Operating modes
+
+### 4.0 Capability discovery
+
+Capability discovery probes the host for Git, a container runtime, scanners, a
+local inference endpoint, and free resources. It emits a `CapabilityReport`
+naming the tracks the host can run and the specific capability blocking any it
+cannot.
+
+Discovery never blocks, installs, elevates, or mutates the host. Provisioning is
+a separate explicit action, restricted to tools obtainable as checksum-verified
+static binaries without elevation.
+
+Capability is measured, never inferred from the operating system, and every
+later mode consults the report rather than assuming a tool exists.
 
 ### 4.1 Audit
 
@@ -87,6 +104,26 @@ policy. Every executable step must have an origin:
   model-generated.
 
 Plan itself performs no project execution.
+
+### 4.2.1 Deployment intent
+
+Deployment intent captures where a project should go and what it needs to run
+there. Candidate providers are proposed from the detected profile; the user
+confirms. LaunchGuard must not select a provider silently.
+
+Intent records the provider, static or server behavior, build command, output
+directory, service port, environment variable names, which of those names are
+secrets to be set in the provider interface rather than committed, an optional
+custom domain, and the provider limits shown to the user at confirmation.
+
+Environment variable values are never captured. Secret values are never read,
+stored, or written into a generated artifact.
+
+Intent is content-addressed and requires approval, on the same basis as an
+execution plan: changing the provider, port, or variable set changes what will
+be published and must invalidate prior approval.
+
+Deployment intent requires no credential and contacts no provider.
 
 ### 4.3 Preview
 
@@ -116,27 +153,77 @@ Pull-request mode presents the final diff, findings delta, test results,
 generated files, and requested GitHub permissions. It requires explicit
 approval before creating a branch, pushing, or opening a pull request.
 
+This is the first mode that requests a credential. Authentication uses the
+GitHub device-authorization flow and displays the exact scopes, target
+repository, and permitted operations before the user authorizes.
+
+Publication gating has three levels, defined in the
+[security model](SECURITY_MODEL.md): a hard block that cannot be overridden, an
+overridable soft block, and clear. A soft-block override is an explicit user
+decision that is recorded in both the deployment record and the pull-request
+body, naming what was not verified and why.
+
+A project audited without a container runtime is a soft block. Its pull request
+must state plainly that no local verification was performed.
+
+Pull-request mode is idempotent. A repeated run for the same revision, plan
+digest, and intent digest updates the existing request rather than opening a
+duplicate.
+
 ### 4.6 Deploy
 
 Deploy is reserved for a later specification. V1 adapters generate and
 validate deployment configuration but do not create cloud resources.
+
+A provider building a merged pull request from its own build system is not
+direct provisioning: the user retains the provider account, the merge, and the
+ability to revoke. LaunchGuard must not describe that outcome as having deployed
+the project itself.
+
+### 4.7 Summary
+
+Summary renders a stored deployment record as a local, shareable artifact
+containing the live URL, stack, findings resolved, verification performed, and
+plan digest.
+
+Summary is generated locally and published nowhere. LaunchGuard does not post to
+external platforms on a user's behalf.
 
 ## 5. Planned interfaces
 
 ### 5.1 CLI
 
 ```text
+launchguard doctor [--format json|markdown]
+launchguard setup [--tool trivy|osv-scanner]
 launchguard audit <path-or-url> [--format json|markdown]
 launchguard plan <path-or-url>
+launchguard target <path-or-url> [--provider <name>]
 launchguard preview <path-or-url> [--approve-plan <digest>]
 launchguard repair <run-id> [--approve-plan <digest>]
-launchguard pr <run-id> [--repository <owner/name>]
+launchguard pr <run-id> [--repository <owner/name>] [--allow-unverified]
+launchguard ship <path-or-url>
+launchguard summary <run-id> [--format json|markdown]
 launchguard status <run-id>
 ```
 
+`ship` is a guided flow over `doctor`, `audit`, `target`, `preview`, and `pr`
+with prompts and defaults. It is a convenience layer, not a separate pipeline:
+it must produce records identical to running those commands individually, and
+every approval it collects is the same approval those commands require.
+
+The guided command is deliberately not named `deploy`. Section 4.6 reserves
+Deploy for direct cloud provisioning, which v1 does not perform. A command named
+`deploy` that only opens a pull request would overstate what the tool did.
+
 Commands must emit machine-readable progress events when `--format json` is
 selected. Interactive approval must never be inferred from a non-interactive
-environment.
+environment, and `deploy` must refuse to run interactively when no terminal is
+attached rather than assuming defaults.
+
+Commands must not require a capability they do not use. `audit`, `plan`,
+`target`, and `summary` must complete without a container runtime, a local
+model, or any credential.
 
 ### 5.2 Local service
 
@@ -152,6 +239,28 @@ as referenced artifacts rather than embedded in every event.
 The Rust engine will serialize public records using versioned JSON schemas.
 
 ```text
+CapabilityReport
+- schema_version
+- platform
+- capabilities[]
+- available_tracks[]
+- blocking_capability
+- detected_at
+
+DeploymentIntent
+- schema_version
+- digest
+- provider
+- deployment_kind
+- build_command
+- output_directory
+- service_port
+- environment_variable_names[]
+- secret_variable_names[]
+- custom_domain
+- provider_limits[]
+- approval_state
+
 ProjectProfile
 - schema_version
 - source
@@ -283,6 +392,21 @@ download rule sets with incompatible product-use terms.
 Ollama is the default local inference adapter. The model is user-configurable
 and must not be bundled until its redistribution and commercial-use license is
 verified.
+
+Inference is pluggable across three backends: local, a user-supplied hosted
+endpoint, and absent. Local remains the default so the free tier never depends
+on a paid service. A hosted backend exists for machines that cannot run a
+capable model, and the user supplies their own credential and pays their own
+provider directly; LaunchGuard never brokers, resells, or proxies inference.
+
+A hosted backend transmits repository-derived content off the machine. It must
+therefore be opt-in per session, never inferred from the presence of a stored
+key, must display which provider will receive the content before the first
+request, and remains subject to the same redaction and size bounds as local
+inference. Silently switching from a local endpoint to a cloud provider is
+prohibited.
+
+The absent backend is a supported configuration, not a failure state.
 
 AI may:
 

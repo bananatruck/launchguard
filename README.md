@@ -160,6 +160,7 @@ The detailed contract is in
 - [Roadmap](docs/ROADMAP.md)
 - [Phase 1 implementation](docs/PHASE_1.md)
 - [Phase 2 implementation](docs/PHASE_2.md)
+- [Phase 3 design](docs/PHASE_3.md)
 - [ProjectProfile v1 JSON Schema](schemas/project-profile-v1.schema.json)
 - [Finding v1 JSON Schema](schemas/finding-v1.schema.json)
 - [ExecutionPlan v1 JSON Schema](schemas/execution-plan-v1.schema.json)
@@ -182,8 +183,16 @@ project. See the [Phase 2 evaluation report](docs/evaluation/phase-2.md) for
 the environment, raw counts, smoke checks, the four defects that real scanner
 runs exposed, and limitations.
 
-Phase 3 cross-platform isolated preview is next. No LaunchGuard release has yet
-executed a project command.
+Phase 3 distribution and capability discovery is next. See the
+[Phase 3 design](docs/PHASE_3.md).
+
+The roadmap was reordered after Phase 2: the deployment path now precedes
+isolated preview, because provider build systems compile from source, so local
+execution verifies a deployment rather than being required to produce one.
+Gating the whole product on the heaviest prerequisite would have made the
+deterministic security work unreachable for most users.
+
+No LaunchGuard release has yet executed a project command.
 
 ## License
 

@@ -105,6 +105,31 @@ interpreter escape hatches require separate review.
 The command plan is content-addressed. Changing a command, mount, environment
 entry, limit, or network rule invalidates approval.
 
+## Tool provisioning
+
+LaunchGuard may download and execute third-party scanner binaries on the user's
+behalf. This is a deliberate expansion of the trust boundary, accepted because
+requiring manual installation of every prerequisite excludes most users from
+the deterministic security checks entirely.
+
+Provisioning must:
+
+- Pin exact versions and expected SHA-256 checksums at release time, never
+  resolve "latest" at runtime.
+- Download over HTTPS with a bounded size, request timeout, and redirect limit.
+- Verify the checksum before the binary is made executable or invoked.
+- Abort and retain nothing on a mismatch, without an unverified fallback.
+- Write only to a user-private data directory, never a system path.
+- Require no elevation. A tool needing elevation is documented, not installed.
+- Never fetch and execute an installer script at runtime.
+
+LaunchGuard must not self-update. A binary that can silently replace itself and
+later request credentials is a supply-chain risk out of proportion to the
+convenience it offers.
+
+Probing an installed tool executes only that tool's own version subcommand and
+passes it no repository-controlled input.
+
 ## AI and prompt-injection controls
 
 Source files and logs may contain instructions aimed at the model. They are
@@ -131,6 +156,40 @@ Provider credentials:
 - Are injected only into the specific adapter process.
 - Never enter the project sandbox or model context.
 - Must not be written to the repository, SQLite history, or deployment record.
+
+No command before publication may request, read, or store a credential. Audit,
+capability discovery, provisioning, planning, deployment-intent capture, and
+preview all complete unauthenticated. A tool that collects tokens during
+onboarding, before the user has seen any result, has taken a credential it did
+not yet need.
+
+GitHub authentication uses the device-authorization flow rather than instructing
+users to construct a personal access token by hand. The engine must display the
+exact scopes requested, the repository the grant applies to, and the operations
+those scopes permit, before the user authorizes. A broader grant than the
+displayed operations require must not be requested for convenience.
+
+## Publication gating
+
+Publication is gated in three levels rather than one, so that incomplete
+evidence and confirmed danger are not treated identically.
+
+| Level | Trigger | Behavior |
+| --- | --- | --- |
+| Hard block | A verified secret finding, or an unacknowledged critical vulnerability | Publication refused. No override. |
+| Soft block | Incomplete scanner coverage, no local verification while a runtime is available, or a failed preview | Publication permitted only with an explicit override, recorded in the pull request |
+| Clear | Complete coverage with no blocking finding | Publication permitted |
+
+An override is a user decision, never an engine inference, and must never be
+derived from a non-interactive environment. Every override records what was not
+verified, why it was skipped, and who accepted the risk, in both the deployment
+record and the pull-request body, so the human reviewing the request sees
+precisely which evidence is missing.
+
+A host with no container runtime is a soft block, not a hard block. Refusing to
+publish because the user cannot install Podman would make the deterministic
+security work of Phases 1 and 2 unreachable for the users most likely to need
+it, without making any project safer.
 
 ## Git safety
 
@@ -196,6 +255,10 @@ The implementation test corpus must include fixtures attempting:
 - Prompt injection requesting policy changes.
 - Patch writes outside the temporary worktree.
 - Publication without approval.
+- A provisioned binary failing checksum verification.
+- A credential requested before the publication stage.
+- A hard-blocked finding reaching publication through an override.
+- A repeated publication run opening a duplicate pull request.
 
 All blocked operations must fail closed and leave an auditable result.
 

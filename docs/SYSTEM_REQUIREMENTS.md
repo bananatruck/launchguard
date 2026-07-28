@@ -5,13 +5,27 @@
 LaunchGuard v1 targets 64-bit Linux, macOS, and Windows desktop systems.
 Interface portability does not mean identical execution backends:
 
-- Linux uses native rootless Podman.
-- macOS uses a Podman Machine Linux VM.
+- Linux uses native rootless Podman, or Docker when Podman is absent.
+- macOS uses a Podman Machine Linux VM, or Docker Desktop.
 - Windows uses a Podman Machine Linux VM with supported Windows
-  virtualization.
+  virtualization, or Docker Desktop.
 
-Docker support may be added through the runtime adapter, but it is not the
-required v1 backend.
+Podman remains the preferred backend because rootless operation is the default
+rather than an option. Docker is a supported backend, not a later candidate,
+because far more users already have it installed and excluding them would
+contradict the accessibility goal.
+
+The runtime adapter also has an absent backend. A host with no container runtime
+runs the deployment track without local verification, as described in the
+[roadmap delivery tracks](ROADMAP.md).
+
+## Distribution
+
+LaunchGuard publishes checksummed prebuilt binaries. A Rust toolchain is
+required only to build from source, never to use a release.
+
+Binaries are unsigned in v1. Apple notarization and Windows code signing are
+recorded below as costs outside the free contract.
 
 ## Hardware profiles
 
@@ -67,17 +81,25 @@ certificate.
 The engine must detect tools and record versions rather than assuming they are
 installed.
 
-| Tool | Required | Purpose |
-| --- | --- | --- |
-| Git | Yes | Revision pinning and temporary worktrees |
-| Podman | Preview and Repair | Rootless OCI execution |
-| Trivy | Audit | Security, secret, configuration, image, and SBOM scans |
-| OSV-Scanner | Audit | Ecosystem vulnerability analysis |
-| Ollama | No | Local explanation and remediation proposals |
-| GitHub CLI or API token | Pull request only | User-approved publication |
+| Tool | Required | Auto-provisioned | Purpose |
+| --- | --- | --- | --- |
+| Git | Yes | No | Revision pinning and temporary worktrees |
+| Podman or Docker | Preview and Repair | No | OCI execution |
+| Trivy | Audit | Yes | Security, secret, configuration, image, and SBOM scans |
+| OSV-Scanner | Audit | Yes | Ecosystem vulnerability analysis |
+| Ollama | No | No | Local explanation and remediation proposals |
+| GitHub account | Pull request only | No | User-approved publication |
+
+Only tools distributed as checksum-verified static binaries that install without
+elevation are auto-provisioned. A container runtime and a model server are
+documented, never installed silently.
 
 Missing Ollama reduces capability but must not block deterministic Audit, Plan,
-or Preview.
+or Preview. A missing container runtime removes local verification but must not
+block Audit, Plan, deployment intent, or publication.
+
+Publication requires no separately installed GitHub tooling. Authentication uses
+the device-authorization flow against the GitHub API.
 
 ## Local AI profile
 
@@ -100,6 +122,18 @@ To fit within the recommended profile:
 - Fall back to scanner- and template-based guidance when inference fails.
 
 ## Definition of free
+
+LaunchGuard operates no server, database, or hosted inference of its own. There
+is no LaunchGuard account and no LaunchGuard backend to pay for, which is what
+makes a permanently free tier sustainable rather than promotional. Any future
+change that introduces a hosted component must be treated as a change to this
+contract.
+
+The complete deployment track — capability discovery, provisioning, audit,
+planning, deployment intent, configuration generation, and a published pull
+request producing a live static site — costs nothing beyond hardware and
+internet access. A container runtime and a local model add verification and
+repair; neither is required to reach a deployment.
 
 “Free” means the local core workflow has no mandatory subscription,
 per-request model charge, or hosted backend:
@@ -125,14 +159,28 @@ per-request model charge, or hosted backend:
 Provider facts change over time. Adapters must query or link current official
 documentation and show limitations before publication.
 
+V1 ships three adapters: Cloudflare Pages and Netlify for static output, and
+Render for server output.
+
 As of the specification date:
 
 - Cloudflare Pages has a free-plan build and project allowance suitable for
   portfolio previews, not unlimited multi-tenant deployment.
+- Netlify has a free-plan bandwidth and build-minute allowance.
 - Render free web services sleep when idle and use ephemeral local filesystems;
   free PostgreSQL is temporary.
 - GitHub Actions is free on standard hosted runners for public repositories;
   private repositories use account quotas.
+
+Static output has a genuinely free steady state. Server output does not: the
+honest free option sleeps when idle, and avoiding that costs a few dollars per
+month per always-on service. An adapter must present that tradeoff before
+publication rather than after the first cold start.
+
+Vercel is deliberately excluded from v1. Its Hobby tier restricts commercial
+use, which is an unsafe default for a tool whose user may not know whether their
+project counts. It is a later candidate, contingent on surfacing that restriction
+clearly enough that a user cannot accept it unknowingly.
 
 LaunchGuard must not encode “free forever” into a readiness decision.
 

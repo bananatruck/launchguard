@@ -40,32 +40,90 @@ corpus, with ambiguous cases reported rather than guessed.
 **Exit criteria:** schema-valid plans for at least 90% of the supported corpus
 and deterministic score reproduction.
 
-## Phase 3: Cross-platform isolated preview
+## Delivery tracks
+
+From Phase 3 onward the engine exposes two tracks. Provider build systems
+compile from source, so local execution verifies a deployment but is not
+required to produce one.
+
+| Track | Requires | Reaches |
+| --- | --- | --- |
+| A: deploy | The `launchguard` binary only | Detect, scan, plan, generate configuration, open a pull request, live URL |
+| B: verify | Track A plus a container runtime | Everything in Track A, plus a locally proven build, test, and health check before publication |
+
+Track A must remain complete without a container runtime, a local model, or a
+Rust toolchain. Missing capability reduces the readiness score and is reported
+as a degradation; it never removes the path to a deployment.
+
+## Phase 3: Distribution and capability discovery
 
 **Status: next.**
 
-- Implement the OCI runtime trait.
+- Publish checksummed prebuilt binaries and a one-line install script for
+  Linux, macOS, and Windows.
+- Add `launchguard doctor` to probe the host and publish a `CapabilityReport`.
+- Add `launchguard setup` to fetch pinned, checksum-verified scanner binaries
+  into a local data directory.
+- Route work by measured capability instead of gating on prerequisites.
+
+**Exit criteria:** a user with no Rust toolchain, no scanners, and no container
+runtime reaches a readiness report on all three platforms, and every probe
+result is a typed record rather than console text.
+
+## Phase 4: Deployment intent and configuration generation
+
+- Add the versioned `DeploymentIntent` record and `launchguard target`.
+- Implement provider adapters for Cloudflare Pages, Netlify, and Render.
+- Generate Dockerfiles, `.dockerignore`, environment templates, and provider
+  manifests from reviewed templates.
+- Validate every generated artifact locally without contacting a provider.
+- Surface live free-tier limits and cost from official provider documentation.
+
+**Exit criteria:** schema-valid deployment configuration for at least 90% of
+the supported corpus, validated locally, with no artifact asserting a cost or
+limit that is not sourced from current provider documentation.
+
+## Phase 5: Guided deployment and pull requests
+
+- Add the `launchguard ship` guided flow with a non-interactive equivalent.
+- Add GitHub device-flow authentication with scoped permission previews.
+- Split publication gating into hard block, overridable soft block, and clear.
+- Record every override and unverified deployment in the pull-request body.
+- Guarantee idempotency so a repeated run never opens a duplicate request.
+- Emit a local deployment summary artifact from the `DeploymentRecord`.
+
+**Exit criteria:** a real repository reaches a live URL through a user-approved
+pull request, publication never occurs without an approval event, rollback
+instructions are present, and no credential is requested before publication.
+
+## Phase 6: Isolated preview and verification
+
+- Implement the OCI runtime trait with Podman, Docker, and absent backends.
 - Support native rootless Podman on Linux.
 - Support Podman Machine on macOS and Windows.
 - Enforce mounts, capabilities, limits, timeouts, and network policy.
 - Stream logs and run health checks.
+- Require a passing preview before publication whenever a runtime is present,
+  subject to a recorded override.
 
 **Exit criteria:** all isolation fixtures fail closed on every supported
-platform and at least 80% of corpus projects preview successfully.
+platform and backend, and at least 80% of corpus projects preview successfully.
 
-## Phase 4: Local AI and bounded repair
+## Phase 7: Local AI and bounded repair
 
-- Add an Ollama-compatible local adapter.
+- Add a pluggable inference adapter covering local, user-supplied hosted, and
+  absent backends, defaulting to Ollama.
 - Implement redaction and source-labeled retrieval.
 - Validate structured diagnoses and unified diffs.
 - Apply proposals only in temporary Git worktrees.
 - Rebuild, test, and rescan for at most three attempts.
 
 **Exit criteria:** no model output crosses a policy boundary, every accepted
-patch has deterministic verification, and remediation success is measured
+patch has deterministic verification, no adapter transmits repository content
+without an explicit per-session grant, and remediation success is measured
 against a fixed failure corpus.
 
-## Phase 5: Tauri desktop application
+## Phase 8: Tauri desktop application
 
 - Build a cross-platform Tauri interface over the existing engine.
 - Present project evidence, findings, plans, diffs, and progress events.
@@ -75,25 +133,17 @@ against a fixed failure corpus.
 **Exit criteria:** CLI and desktop produce equivalent engine records for the
 same revision and policy.
 
-## Phase 6: Deployment pull requests
-
-- Generate Docker, environment, Cloudflare Pages, and Render files.
-- Validate generated artifacts locally.
-- Add scoped GitHub authentication and permission previews.
-- Create branches and pull requests only after explicit approval.
-- Include the reproducibility record in pull-request output.
-
-**Exit criteria:** generated configurations validate for the supported corpus,
-publication never occurs without an approval event, and rollback instructions
-are present.
-
 ## Later candidates
 
+- Vercel adapter, once non-commercial Hobby-tier terms can be surfaced clearly
+  enough that a user cannot deploy a commercial project by accident.
+- Fly.io and other always-on server providers.
+- Signed and notarized distribution for macOS and Windows.
+- Shareable deployment summaries published to external platforms.
 - PostgreSQL and migration detection.
 - Multi-service Compose generation.
 - Semgrep integration with license-compatible rule selection.
 - SBOM attestations and signed provenance.
-- Additional container runtimes.
 - Provider cost estimation.
 - GitHub Actions generation.
 - Plugin SDK.
