@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 424" width="880" height="424" role="img" aria-label="Terminal session showing launchguard ship guiding a project to a pull request">
+  <defs>
+    <linearGradient id="termbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#15171e"/>
+      <stop offset="100%" stop-color="#0b0d11"/>
+    </linearGradient>
+    <filter id="grain4" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <filter id="soften4" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <rect width="880" height="424" fill="#0a0b0e"/>
+  <ellipse cx="760" cy="60" rx="200" ry="120" fill="#3d5a80" opacity="0.10" filter="url(#soften4)"/>
+
+  <rect x="24" y="20" width="832" height="384" rx="8" fill="url(#termbg)" stroke="#262a33" stroke-width="1"/>
+  <rect x="24" y="20" width="832" height="34" rx="8" fill="#171a21"/>
+  <rect x="24" y="46" width="832" height="8" fill="#171a21"/>
+  <circle cx="48" cy="37" r="4.5" fill="#3a3f4a"/>
+  <circle cx="66" cy="37" r="4.5" fill="#3a3f4a"/>
+  <circle cx="84" cy="37" r="4.5" fill="#3a3f4a"/>
+  <text x="440" y="41" font-family="ui-monospace, Menlo, monospace" font-size="10.5" fill="#5d5951" text-anchor="middle">launchguard</text>
+  <line x1="24" y1="54" x2="856" y2="54" stroke="#262a33" stroke-width="1"/>
+
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12.5">
+    <text x="48" y="84"><tspan fill="#4a9d9c">$</tspan><tspan fill="#e8e3d9" xml:space="preserve">  launchguard ship ./my-app</tspan></text>
+
+    <text x="48" y="118"><tspan fill="#4a9d9c">✓</tspan><tspan fill="#b9b3a8" xml:space="preserve">  React/Vite detected  </tspan><tspan fill="#6b665e">·  pnpm  ·  static</tspan></text>
+    <text x="48" y="140"><tspan fill="#4a9d9c">✓</tspan><tspan fill="#b9b3a8" xml:space="preserve">  Trivy 0.72.0 and OSV-Scanner 2.4.0 completed</tspan></text>
+    <text x="48" y="162"><tspan fill="#a8714f">!</tspan><tspan fill="#b9b3a8" xml:space="preserve">  no container runtime  </tspan><tspan fill="#6b665e">·  skipping local verification</tspan></text>
+
+    <text x="48" y="200" fill="#7d776d">   readiness</text>
+    <text x="48" y="222"><tspan fill="#5d5951" xml:space="preserve">     build  </tspan><tspan fill="#4a9d9c">████████████░░░░</tspan><tspan fill="#b9b3a8" xml:space="preserve">  72%</tspan></text>
+    <text x="48" y="242"><tspan fill="#5d5951" xml:space="preserve">  security  </tspan><tspan fill="#4a9d9c">███████████████░</tspan><tspan fill="#b9b3a8" xml:space="preserve">  94%</tspan></text>
+    <text x="48" y="262"><tspan fill="#5d5951" xml:space="preserve">    deploy  </tspan><tspan fill="#4a9d9c">████████████████</tspan><tspan fill="#b9b3a8" xml:space="preserve"> 100%</tspan></text>
+
+    <text x="48" y="298" fill="#7d776d">   where should this go?</text>
+    <text x="48" y="320"><tspan fill="#4a9d9c" xml:space="preserve">   ❯ </tspan><tspan fill="#e8e3d9">Cloudflare Pages</tspan><tspan fill="#6b665e" xml:space="preserve">     free · static</tspan></text>
+    <text x="48" y="340"><tspan fill="#5d5951" xml:space="preserve">     Netlify</tspan><tspan fill="#6b665e" xml:space="preserve">              free · build minutes capped</tspan></text>
+
+    <text x="48" y="376" fill="#7d776d">   2 environment variables needed, values set in the provider</text>
+    <text x="48" y="396"><tspan fill="#e8e3d9" xml:space="preserve">   open a pull request? </tspan><tspan fill="#4a9d9c">[Y/n]</tspan><tspan fill="#e8e3d9">_</tspan></text>
+  </g>
+
+  <rect width="880" height="424" filter="url(#grain4)" opacity="0.05"/>
+</svg>

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="880" height="300" role="img" aria-label="Publication gating has three levels: hard block, overridable soft block, and clear">
+  <defs>
+    <linearGradient id="gbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14161d"/>
+      <stop offset="100%" stop-color="#0c0e13"/>
+    </linearGradient>
+    <filter id="grain3" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <filter id="soften3" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <rect width="880" height="300" fill="url(#gbg)"/>
+  <ellipse cx="140" cy="270" rx="220" ry="110" fill="#8a6f5c" opacity="0.07" filter="url(#soften3)"/>
+
+  <text x="44" y="46" font-family="Georgia, 'Times New Roman', serif" font-size="21" fill="#e8e3d9" letter-spacing="0.4">Publication gating</text>
+  <text x="44" y="68" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#7d776d">incomplete evidence and confirmed danger are not the same thing</text>
+
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">
+
+    <g transform="translate(44,92)">
+      <rect width="792" height="58" rx="5" fill="#1e1a18"/>
+      <rect width="4" height="58" rx="2" fill="#a8714f"/>
+      <text x="28" y="25" font-size="13.5" fill="#e8e3d9">hard block</text>
+      <text x="28" y="44" font-size="10.5" fill="#8a7a70">a verified secret, or an unacknowledged critical vulnerability</text>
+      <text x="766" y="35" font-size="11" fill="#a8714f" text-anchor="end">no override exists</text>
+    </g>
+
+    <g transform="translate(44,160)">
+      <rect width="792" height="58" rx="5" fill="#1a1e26"/>
+      <rect width="4" height="58" rx="2" fill="#4a6b94"/>
+      <text x="28" y="25" font-size="13.5" fill="#e8e3d9">soft block</text>
+      <text x="28" y="44" font-size="10.5" fill="#7d8899">incomplete scanner coverage · no local verification · failed preview</text>
+      <text x="766" y="35" font-size="11" fill="#4a6b94" text-anchor="end">override recorded in the pull request</text>
+    </g>
+
+    <g transform="translate(44,228)">
+      <rect width="792" height="42" rx="5" fill="#182220"/>
+      <rect width="4" height="42" rx="2" fill="#4a9d9c"/>
+      <text x="28" y="20" font-size="13.5" fill="#e8e3d9">clear</text>
+      <text x="28" y="35" font-size="10.5" fill="#6f8483">complete coverage, no blocking finding</text>
+      <text x="766" y="27" font-size="11" fill="#4a9d9c" text-anchor="end">publication permitted</text>
+    </g>
+
+  </g>
+
+  <rect width="880" height="300" filter="url(#grain3)" opacity="0.055"/>
+</svg>

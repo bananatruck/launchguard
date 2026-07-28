@@ -11,20 +11,35 @@ projects.**
 > found and what it proposes to run. It does not build, test, install, repair,
 > or deploy repository code, and it never claims a project is secure.
 
-LaunchGuard will inspect a local repository or GitHub URL, determine how the
-project is built, normalize security findings, test it in an isolated
-environment, use optional local AI to diagnose failures, and generate a
+LaunchGuard inspects a local repository or GitHub URL, determines how the
+project is built, normalizes security findings, tests it in an isolated
+environment, uses optional local AI to diagnose failures, and generates a
 reviewable deployment pull request.
 
-It follows one gated pipeline:
-
-```text
-Detect → Scan → Plan → Approve → Build → Test → Explain → Repair → Verify → Publish
-```
+![The LaunchGuard pipeline, stage by stage, showing what each one requires](docs/assets/pipeline.svg)
 
 LaunchGuard is not an unattended production deployment service. Its most
-privileged v1 outcome is a user-approved pull request containing tested
+privileged outcome is a user-approved pull request containing tested
 deployment configuration.
+
+## How it works
+
+Every stage produces a typed, versioned record, and nothing that changes the
+world happens without an approval bound to a content digest.
+
+![Terminal session showing launchguard ship guiding a project to a pull request](docs/assets/terminal.svg)
+
+Credentials are requested once, at publication, and never before. Everything up
+to that point runs unauthenticated on any machine.
+
+## Two ways to run it
+
+![Track A deploys with only the binary; Track B adds local verification with a container runtime](docs/assets/tracks.svg)
+
+Provider build systems compile from source, so a local sandbox verifies a
+deployment rather than being required to produce one. Track A therefore reaches
+a live URL with nothing installed but the binary. Track B adds a container
+runtime and proves the build before anything is published.
 
 ## Product principles
 
@@ -134,6 +149,11 @@ scoring, limits, and known limitations.
 | Modify the original checkout | No | Yes |
 | Push a branch or open a pull request | No | Yes |
 | Read credentials or provision infrastructure | No | Always |
+
+Publication is gated in three levels, so that missing evidence and confirmed
+danger are never treated the same way.
+
+![Publication gating: hard block, overridable soft block, and clear](docs/assets/gating.svg)
 
 See the full [product specification](docs/SPECIFICATION.md) and
 [security model](docs/SECURITY_MODEL.md).

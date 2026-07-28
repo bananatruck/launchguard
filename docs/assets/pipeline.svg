@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 486" width="880" height="486" role="img" aria-label="LaunchGuard pipeline stages and what each one requires">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14161d"/>
+      <stop offset="55%" stop-color="#101219"/>
+      <stop offset="100%" stop-color="#0c0e13"/>
+    </linearGradient>
+    <linearGradient id="wash" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3d5a80" stop-opacity="0.30"/>
+      <stop offset="60%" stop-color="#3d5a80" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#3d5a80" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <filter id="soften" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+
+  <rect width="880" height="486" fill="url(#bg)"/>
+  <ellipse cx="120" cy="70" rx="230" ry="150" fill="url(#wash)" filter="url(#soften)"/>
+  <ellipse cx="800" cy="440" rx="180" ry="120" fill="#4a9d9c" opacity="0.05" filter="url(#soften)"/>
+
+  <text x="44" y="52" font-family="Georgia, 'Times New Roman', serif" font-size="21" fill="#e8e3d9" letter-spacing="0.4">How LaunchGuard works</text>
+  <text x="44" y="74" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#7d776d" letter-spacing="0.3">every stage is a typed record · nothing runs without approval</text>
+  <line x1="44" y1="90" x2="836" y2="90" stroke="#2a2e37" stroke-width="1"/>
+
+  <!-- stage rows -->
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">
+
+    <g transform="translate(0,110)">
+      <rect x="44" y="0" width="792" height="46" rx="4" fill="#191c23"/>
+      <rect x="44" y="0" width="2.5" height="46" fill="#4a9d9c"/>
+      <text x="68" y="21" font-size="13.5" fill="#e8e3d9">doctor</text>
+      <text x="68" y="37" font-size="10.5" fill="#726c63">probe the host, publish a CapabilityReport</text>
+      <text x="820" y="27" font-size="10" fill="#4a9d9c" text-anchor="end">nothing required</text>
+    </g>
+
+    <g transform="translate(0,162)">
+      <rect x="44" y="0" width="792" height="46" rx="4" fill="#191c23"/>
+      <rect x="44" y="0" width="2.5" height="46" fill="#4a9d9c"/>
+      <text x="68" y="21" font-size="13.5" fill="#e8e3d9">setup</text>
+      <text x="68" y="37" font-size="10.5" fill="#726c63">fetch pinned, checksum-verified scanners</text>
+      <text x="820" y="27" font-size="10" fill="#4a9d9c" text-anchor="end">nothing required</text>
+    </g>
+
+    <g transform="translate(0,214)">
+      <rect x="44" y="0" width="792" height="46" rx="4" fill="#1c2029"/>
+      <rect x="44" y="0" width="2.5" height="46" fill="#4a9d9c"/>
+      <text x="68" y="21" font-size="13.5" fill="#e8e3d9">audit</text>
+      <text x="68" y="37" font-size="10.5" fill="#8a8378">detect → scan → plan → score readiness</text>
+      <text x="820" y="27" font-size="10" fill="#4a9d9c" text-anchor="end">no credentials</text>
+    </g>
+
+    <g transform="translate(0,266)">
+      <rect x="44" y="0" width="792" height="46" rx="4" fill="#1c2029"/>
+      <rect x="44" y="0" width="2.5" height="46" fill="#4a9d9c"/>
+      <text x="68" y="21" font-size="13.5" fill="#e8e3d9">target</text>
+      <text x="68" y="37" font-size="10.5" fill="#8a8378">choose a provider, capture DeploymentIntent</text>
+      <text x="820" y="27" font-size="10" fill="#4a9d9c" text-anchor="end">no credentials</text>
+    </g>
+
+    <g transform="translate(0,318)">
+      <rect x="44" y="0" width="792" height="46" rx="4" fill="#171a20"/>
+      <rect x="44" y="0" width="2.5" height="46" fill="#4a6b94"/>
+      <text x="68" y="21" font-size="13.5" fill="#b9b3a8">preview</text>
+      <text x="68" y="37" font-size="10.5" fill="#6b665e">build, test, and health-check in a sandbox</text>
+      <text x="820" y="27" font-size="10" fill="#4a6b94" text-anchor="end">optional · container runtime</text>
+    </g>
+
+    <g transform="translate(0,370)">
+      <rect x="44" y="0" width="792" height="46" rx="4" fill="#1c2029"/>
+      <rect x="44" y="0" width="2.5" height="46" fill="#e8e3d9"/>
+      <text x="68" y="21" font-size="13.5" fill="#e8e3d9">pr</text>
+      <text x="68" y="37" font-size="10.5" fill="#8a8378">generate config, open a reviewed pull request</text>
+      <text x="820" y="27" font-size="10" fill="#e8e3d9" text-anchor="end">credentials requested here, first time</text>
+    </g>
+
+    <g transform="translate(0,422)">
+      <rect x="44" y="0" width="792" height="40" rx="4" fill="#191c23"/>
+      <rect x="44" y="0" width="2.5" height="40" fill="#4a9d9c"/>
+      <text x="68" y="19" font-size="13.5" fill="#e8e3d9">summary</text>
+      <text x="68" y="33" font-size="10.5" fill="#726c63">render the deployment record as a shareable artifact</text>
+      <text x="820" y="24" font-size="10" fill="#4a9d9c" text-anchor="end">local only</text>
+    </g>
+
+  </g>
+
+  <rect width="880" height="486" filter="url(#grain)" opacity="0.055"/>
+</svg>
