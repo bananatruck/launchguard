@@ -163,6 +163,10 @@ pub enum LaunchGuardError {
     #[error("deployment intent unavailable: {0}")]
     DeploymentIntentUnavailable(String),
 
+    /// Policy refuses publication and no override applies.
+    #[error("publication refused: {0}")]
+    PublicationRefused(String),
+
     /// A generated deployment artifact failed local validation.
     #[error("invalid generated artifact {path}: {message}")]
     GeneratedArtifact {

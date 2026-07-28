@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/publication-decision-v1.schema.json",
+  "title": "LaunchGuard PublicationDecision v1",
+  "description": "Whether a run may open a pull request, and why. A hard block cannot be overridden; a soft block can, by an explicit human decision recorded here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "level", "reasons", "override_accepted", "overridden_codes", "digest"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "level": { "enum": ["clear", "soft_block", "hard_block"] },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "level", "summary"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "level": { "enum": ["clear", "soft_block", "hard_block"] },
+          "summary": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "override_accepted": { "type": "boolean" },
+    "overridden_codes": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }
+    },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

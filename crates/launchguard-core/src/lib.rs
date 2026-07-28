@@ -13,6 +13,7 @@ mod model;
 mod plan;
 mod provider;
 mod provision;
+mod publication;
 mod readiness;
 mod scanner;
 
@@ -53,6 +54,10 @@ pub use provider::{
 pub use provision::{
     OSV_SCANNER_VERSION, PROVISIONED_TOOL_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_VERSION,
     ProvisionedTool, Provisioner, TRIVY_VERSION,
+};
+pub use publication::{
+    GateLevel, GateReason, PUBLICATION_DECISION_SCHEMA_JSON, PUBLICATION_DECISION_SCHEMA_VERSION,
+    PreviewOutcome, PublicationDecision, PublicationGate,
 };
 pub use readiness::{
     DimensionScore, READINESS_POLICY_VERSION, READINESS_SCHEMA_JSON, READINESS_SCHEMA_VERSION,
