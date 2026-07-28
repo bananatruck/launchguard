@@ -10,12 +10,13 @@ use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
 use launchguard_core::{
     ArtifactStore, CAPABILITY_REPORT_SCHEMA_JSON, CapabilityKind, CapabilityProbe,
-    CapabilityReport, CapabilityStatus, DEGRADATION_SCHEMA_JSON, Degradation, DeliveryTrack,
-    DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, Finding,
-    HistoryEntry, HistoryStore, PROJECT_PROFILE_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_JSON,
-    PlanGenerator, ProjectProfile, Provisioner, RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON,
+    CapabilityReport, CapabilityStatus, DEGRADATION_SCHEMA_JSON, DEPLOYMENT_INTENT_SCHEMA_JSON,
+    Degradation, DeliveryTrack, DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON,
+    FINDING_SCHEMA_JSON, Finding, GENERATED_FILE_SCHEMA_JSON, HistoryEntry, HistoryStore,
+    IntentGenerator, PROJECT_PROFILE_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_JSON, PlanGenerator,
+    ProjectProfile, Provider, Provisioner, RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON,
     RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord, ScannerConfig, ScannerKind,
-    ScannerLimits, ScannerProvenance, ScannerRunner, merge_findings,
+    ScannerLimits, ScannerProvenance, ScannerRunner, generate_configuration, merge_findings,
 };
 use serde_json::json;
 use tracing::warn;
@@ -100,6 +101,24 @@ enum Command {
         osv_executable: PathBuf,
     },
 
+    /// Choose a provider and generate deployment configuration. No credentials.
+    Target {
+        /// Local directory or public GitHub repository URL.
+        source: String,
+
+        /// Provider to target. Omit to list the candidates for this project.
+        #[arg(long, value_enum)]
+        provider: Option<ProviderSelection>,
+
+        /// Optional custom domain to record in the intent.
+        #[arg(long)]
+        domain: Option<String>,
+
+        /// Report representation.
+        #[arg(long, value_enum, default_value_t = OutputFormat::Markdown)]
+        format: OutputFormat,
+    },
+
     /// Generate a reviewed execution plan without running scanners or project code.
     Plan {
         /// Local directory or public GitHub repository URL.
@@ -167,6 +186,23 @@ impl From<ScannerSelection> for ScannerKind {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
+enum ProviderSelection {
+    CloudflarePages,
+    Netlify,
+    Render,
+}
+
+impl From<ProviderSelection> for Provider {
+    fn from(value: ProviderSelection) -> Self {
+        match value {
+            ProviderSelection::CloudflarePages => Self::CloudflarePages,
+            ProviderSelection::Netlify => Self::Netlify,
+            ProviderSelection::Render => Self::Render,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
 enum SchemaRecord {
     ProjectProfile,
     Finding,
@@ -175,6 +211,8 @@ enum SchemaRecord {
     Degradation,
     CapabilityReport,
     ProvisionedTool,
+    DeploymentIntent,
+    GeneratedFile,
 }
 
 #[tokio::main]
@@ -217,6 +255,12 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Command::Target {
+            source,
+            provider,
+            domain,
+            format,
+        } => target(&source, provider.map(Provider::from), domain, format).await,
         Command::Plan { source, format } => plan(&source, format).await,
         Command::Status { run_id, format } => {
             let store = HistoryStore::open(&database_path)?;
@@ -237,6 +281,8 @@ async fn main() -> Result<()> {
                 SchemaRecord::Degradation => DEGRADATION_SCHEMA_JSON,
                 SchemaRecord::CapabilityReport => CAPABILITY_REPORT_SCHEMA_JSON,
                 SchemaRecord::ProvisionedTool => PROVISIONED_TOOL_SCHEMA_JSON,
+                SchemaRecord::DeploymentIntent => DEPLOYMENT_INTENT_SCHEMA_JSON,
+                SchemaRecord::GeneratedFile => GENERATED_FILE_SCHEMA_JSON,
             };
             println!("{schema}");
             Ok(())
@@ -552,6 +598,107 @@ async fn scan(
         artifact,
         provenance,
     })
+}
+
+/// Choose where a project should go and generate its configuration.
+///
+/// Contacts no provider, creates no cloud resource, and requests no credential.
+/// Without `--provider` it lists candidates rather than choosing one, because
+/// the engine must never select a provider silently.
+async fn target(
+    source: &str,
+    provider: Option<Provider>,
+    domain: Option<String>,
+    format: OutputFormat,
+) -> Result<()> {
+    let repository = RepositoryAcquirer::new()?
+        .acquire(source)
+        .await
+        .with_context(|| format!("failed to acquire {source}"))?;
+    let profile = DetectionEngine::default()
+        .inspect(&repository)
+        .with_context(|| format!("failed to inspect {source}"))?;
+
+    let Some(provider) = provider else {
+        let candidates = IntentGenerator
+            .candidates(&profile)
+            .context("failed to propose deployment targets")?;
+        match format {
+            OutputFormat::Json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "profile": profile,
+                        "candidates": candidates,
+                    }))?
+                );
+            }
+            OutputFormat::Markdown => {
+                println!("# Deployment targets\n");
+                for candidate in &candidates {
+                    println!(
+                        "## {} (`--provider {}`)\n",
+                        candidate.provider.display_name(),
+                        candidate.provider.as_str().replace('_', "-")
+                    );
+                    println!("{}\n", candidate.rationale);
+                    for limit in &candidate.limits {
+                        println!("- {} — <{}>", limit.summary, limit.documentation_url);
+                    }
+                    println!();
+                }
+                println!("Re-run with `--provider <name>` to generate configuration.");
+            }
+        }
+        return Ok(());
+    };
+
+    let intent = IntentGenerator
+        .generate(&profile, provider, domain)
+        .context("failed to capture deployment intent")?;
+    let files =
+        generate_configuration(&intent).context("failed to generate deployment configuration")?;
+
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "profile": profile,
+                    "intent": intent,
+                    "generated_files": files,
+                }))?
+            );
+        }
+        OutputFormat::Markdown => {
+            println!("# Deployment intent\n");
+            println!("- Provider: {}", intent.provider.display_name());
+            println!("- Digest: `{}`", intent.digest);
+            println!("- Approval: `requires_approval`");
+            if let Some(port) = intent.service_port {
+                println!("- Service port: {port}");
+            }
+            if let Some(output) = &intent.output_directory {
+                println!("- Output directory: `{output}`");
+            }
+            println!("\n## Provider limits\n");
+            for limit in &intent.provider_limits {
+                println!("- {} — <{}>", limit.summary, limit.documentation_url);
+            }
+            if !intent.secret_variable_names.is_empty() {
+                println!("\n## Set these in the provider dashboard\n");
+                for name in &intent.secret_variable_names {
+                    println!("- `{name}`");
+                }
+            }
+            println!("\n## Generated files\n");
+            for file in &files {
+                println!("- `{}` ({:?})", file.path, file.kind);
+            }
+            println!("\nNothing was written. These are proposals for a reviewed pull request.");
+        }
+    }
+    Ok(())
 }
 
 async fn plan(source: &str, format: OutputFormat) -> Result<()> {

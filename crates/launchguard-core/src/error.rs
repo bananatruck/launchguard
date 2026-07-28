@@ -158,6 +158,19 @@ pub enum LaunchGuardError {
         /// Contract failure without artifact contents.
         message: String,
     },
+
+    /// Deployment intent cannot be captured for this profile or provider.
+    #[error("deployment intent unavailable: {0}")]
+    DeploymentIntentUnavailable(String),
+
+    /// A generated deployment artifact failed local validation.
+    #[error("invalid generated artifact {path}: {message}")]
+    GeneratedArtifact {
+        /// Repository-relative artifact path, when known.
+        path: String,
+        /// Validation failure without artifact contents.
+        message: String,
+    },
 }
 
 /// Result type used by the `LaunchGuard` engine.

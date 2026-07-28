@@ -158,6 +158,16 @@ The `audit` command:
 The `plan` command generates and prints a reviewed execution plan without
 running scanners or project code.
 
+The `target` command chooses where a project should go and generates its
+deployment configuration — a provider manifest, and for server projects a
+Dockerfile that runs as a non-root user. Run it without `--provider` to see the
+candidates and their free-tier limits; LaunchGuard never selects a provider
+silently. It contacts no provider, creates no cloud resource, requests no
+credential, and writes nothing: the files are proposals for a reviewed pull
+request. Environment variable values are never collected, so generated templates
+contain names only, and names that look like credentials are separated out to be
+set in the provider dashboard instead.
+
 Set `LAUNCHGUARD_DATABASE` or pass `--database` to choose the history file, and
 `LAUNCHGUARD_TRIVY` or `LAUNCHGUARD_OSV_SCANNER` to pin scanner executables.
 Only environment variable names are collected; values from `.env` files are
@@ -218,6 +228,8 @@ The detailed contract is in
 - [Degradation v1 JSON Schema](schemas/degradation-v1.schema.json)
 - [CapabilityReport v1 JSON Schema](schemas/capability-report-v1.schema.json)
 - [ProvisionedTool v1 JSON Schema](schemas/provisioned-tool-v1.schema.json)
+- [DeploymentIntent v1 JSON Schema](schemas/deployment-intent-v1.schema.json)
+- [GeneratedFile v1 JSON Schema](schemas/generated-file-v1.schema.json)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status

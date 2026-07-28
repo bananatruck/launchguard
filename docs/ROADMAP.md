@@ -72,6 +72,11 @@ result is a typed record rather than console text.
 
 ## Phase 4: Deployment intent and configuration generation
 
+**Status: implemented, pending real-project validation.** Measured 40/40
+schema-valid configurations over the supported corpus. That corpus is synthetic,
+so the number reflects template and adapter correctness rather than real-world
+provider coverage.
+
 - Add the versioned `DeploymentIntent` record and `launchguard target`.
 - Implement provider adapters for Cloudflare Pages, Netlify, and Render.
 - Generate Dockerfiles, `.dockerignore`, environment templates, and provider

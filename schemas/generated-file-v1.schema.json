@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/generated-file-v1.schema.json",
+  "title": "LaunchGuard GeneratedFile v1",
+  "description": "One file a provider adapter proposes adding to the repository. Contents never include an environment variable value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "path", "kind", "contents", "digest"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^[^/\\\\][^\\\\]*$" },
+    "kind": {
+      "enum": ["dockerfile", "docker_ignore", "environment_template", "provider_manifest"]
+    },
+    "contents": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

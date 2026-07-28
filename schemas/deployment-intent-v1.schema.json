@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/deployment-intent-v1.schema.json",
+  "title": "LaunchGuard DeploymentIntent v1",
+  "description": "Where a project should be published and what it needs there. Captured before any credential exists and before any provider is contacted. Environment variable values are never collected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "digest",
+    "provider",
+    "deployment_kind",
+    "framework",
+    "component_root",
+    "build_command",
+    "output_directory",
+    "service_port",
+    "environment_variable_names",
+    "secret_variable_names",
+    "custom_domain",
+    "provider_limits",
+    "approval_state"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "provider": { "enum": ["cloudflare_pages", "netlify", "render"] },
+    "deployment_kind": { "enum": ["static", "server"] },
+    "framework": { "enum": ["react_vite", "next_js", "fast_api", "rust_axum"] },
+    "component_root": { "type": "string", "minLength": 1 },
+    "build_command": { "type": ["string", "null"] },
+    "output_directory": { "type": ["string", "null"] },
+    "service_port": { "type": ["integer", "null"], "minimum": 1, "maximum": 65535 },
+    "environment_variable_names": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "secret_variable_names": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "custom_domain": { "type": ["string", "null"] },
+    "provider_limits": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary", "documentation_url"],
+        "properties": {
+          "summary": { "type": "string", "minLength": 1 },
+          "documentation_url": { "type": "string", "pattern": "^https://" }
+        }
+      }
+    },
+    "approval_state": { "const": "requires_approval" }
+  }
+}

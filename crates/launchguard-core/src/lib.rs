@@ -4,12 +4,14 @@ mod acquire;
 mod artifact;
 mod capability;
 mod degradation;
+mod deploy;
 mod detect;
 mod error;
 mod finding;
 mod history;
 mod model;
 mod plan;
+mod provider;
 mod provision;
 mod readiness;
 mod scanner;
@@ -22,6 +24,10 @@ pub use capability::{
 };
 pub use degradation::{
     DEGRADATION_SCHEMA_JSON, DEGRADATION_SCHEMA_VERSION, Degradation, DegradationKind,
+};
+pub use deploy::{
+    DEPLOYMENT_INTENT_SCHEMA_JSON, DEPLOYMENT_INTENT_SCHEMA_VERSION, DeploymentIntent,
+    IntentGenerator, Provider, ProviderCandidate, ProviderLimit,
 };
 pub use detect::{DetectionEngine, DetectionLimits};
 pub use error::{LaunchGuardError, Result};
@@ -39,6 +45,10 @@ pub use plan::{
     ApprovalState, CommandStage, EXECUTION_PLAN_SCHEMA_JSON, EXECUTION_PLAN_SCHEMA_VERSION,
     ExecutionPlan, ExpectedOutput, HealthCheck, HealthCheckKind, NetworkPolicy, OutputKind,
     PlanCommand, PlanGenerator, REVIEWED_TEMPLATE_VERSION, ResourceLimits,
+};
+pub use provider::{
+    GENERATED_FILE_SCHEMA_JSON, GENERATED_FILE_SCHEMA_VERSION, GeneratedFile, GeneratedFileKind,
+    ProviderAdapter, adapter_for, generate_configuration, validate_generated,
 };
 pub use provision::{
     OSV_SCANNER_VERSION, PROVISIONED_TOOL_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_VERSION,
