@@ -10,6 +10,7 @@ mod finding;
 mod history;
 mod model;
 mod plan;
+mod provision;
 mod readiness;
 mod scanner;
 
@@ -38,6 +39,10 @@ pub use plan::{
     ApprovalState, CommandStage, EXECUTION_PLAN_SCHEMA_JSON, EXECUTION_PLAN_SCHEMA_VERSION,
     ExecutionPlan, ExpectedOutput, HealthCheck, HealthCheckKind, NetworkPolicy, OutputKind,
     PlanCommand, PlanGenerator, REVIEWED_TEMPLATE_VERSION, ResourceLimits,
+};
+pub use provision::{
+    OSV_SCANNER_VERSION, PROVISIONED_TOOL_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_VERSION,
+    ProvisionedTool, Provisioner, TRIVY_VERSION,
 };
 pub use readiness::{
     DimensionScore, READINESS_POLICY_VERSION, READINESS_SCHEMA_JSON, READINESS_SCHEMA_VERSION,

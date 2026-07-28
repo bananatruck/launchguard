@@ -103,6 +103,7 @@ degrades coverage instead of failing the run.
 ```bash
 cargo build --locked
 cargo run --locked -- doctor
+cargo run --locked -- setup
 cargo run --locked -- audit ./path/to/project --format json
 cargo run --locked -- audit ./path/to/project --scanner trivy --scanner osv-scanner
 cargo run --locked -- audit https://github.com/owner/public-repository
@@ -116,6 +117,13 @@ The `doctor` command probes this host and reports which delivery tracks it can
 run. It never blocks, installs, or changes anything, and it succeeds even when
 nothing is installed — a missing capability is an outcome to report, not a
 reason to refuse work.
+
+The `setup` command installs the scanners this host is missing, from versions
+and SHA-256 digests compiled into the release. Verification happens before a
+binary is made executable, a mismatch aborts and keeps nothing, and everything
+lands in a private directory without needing elevation. A container runtime and
+a model server are documented rather than installed, because both need
+elevation or very large downloads.
 
 The `audit` command:
 
@@ -193,6 +201,7 @@ The detailed contract is in
 - [ReadinessAssessment v1 JSON Schema](schemas/readiness-assessment-v1.schema.json)
 - [Degradation v1 JSON Schema](schemas/degradation-v1.schema.json)
 - [CapabilityReport v1 JSON Schema](schemas/capability-report-v1.schema.json)
+- [ProvisionedTool v1 JSON Schema](schemas/provisioned-tool-v1.schema.json)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status

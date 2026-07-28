@@ -254,6 +254,7 @@ fn phase_two_schema_commands_emit_expected_contracts() {
         ("readiness-assessment", "LaunchGuard ReadinessAssessment v1"),
         ("degradation", "LaunchGuard Degradation v1"),
         ("capability-report", "LaunchGuard CapabilityReport v1"),
+        ("provisioned-tool", "LaunchGuard ProvisionedTool v1"),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_launchguard"))
             .arg("schema")

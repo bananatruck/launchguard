@@ -9,14 +9,15 @@ use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
 use launchguard_core::{
-    ArtifactStore, CAPABILITY_REPORT_SCHEMA_JSON, CapabilityProbe, CapabilityReport,
-    CapabilityStatus, DEGRADATION_SCHEMA_JSON, Degradation, DeliveryTrack, DetectionEngine,
-    DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, Finding, HistoryEntry,
-    HistoryStore, PROJECT_PROFILE_SCHEMA_JSON, PlanGenerator, ProjectProfile,
-    RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine,
-    RepositoryAcquirer, RunRecord, ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance,
-    ScannerRunner, merge_findings,
+    ArtifactStore, CAPABILITY_REPORT_SCHEMA_JSON, CapabilityKind, CapabilityProbe,
+    CapabilityReport, CapabilityStatus, DEGRADATION_SCHEMA_JSON, Degradation, DeliveryTrack,
+    DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, Finding,
+    HistoryEntry, HistoryStore, PROJECT_PROFILE_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_JSON,
+    PlanGenerator, ProjectProfile, Provisioner, RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON,
+    RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord, ScannerConfig, ScannerKind,
+    ScannerLimits, ScannerProvenance, ScannerRunner, merge_findings,
 };
+use serde_json::json;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
@@ -49,6 +50,21 @@ struct Cli {
 enum Command {
     /// Probe this host and report which delivery tracks it can run.
     Doctor {
+        /// Report representation.
+        #[arg(long, value_enum, default_value_t = OutputFormat::Markdown)]
+        format: OutputFormat,
+    },
+
+    /// Install pinned, checksum-verified scanner binaries into a private directory.
+    Setup {
+        /// Tool to install. Repeat to select several; defaults to every missing one.
+        #[arg(long, value_enum)]
+        tool: Vec<ScannerSelection>,
+
+        /// Directory for provisioned executables.
+        #[arg(long, env = "LAUNCHGUARD_TOOL_DIRECTORY")]
+        tool_directory: Option<PathBuf>,
+
         /// Report representation.
         #[arg(long, value_enum, default_value_t = OutputFormat::Markdown)]
         format: OutputFormat,
@@ -158,6 +174,7 @@ enum SchemaRecord {
     ReadinessAssessment,
     Degradation,
     CapabilityReport,
+    ProvisionedTool,
 }
 
 #[tokio::main]
@@ -168,6 +185,14 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::Doctor { format } => doctor(format).await,
+        Command::Setup {
+            tool,
+            tool_directory,
+            format,
+        } => {
+            let tool_directory = tool_directory.map_or_else(default_tool_path, Ok)?;
+            setup(&tool, &tool_directory, format).await
+        }
         Command::Audit {
             source,
             format,
@@ -211,6 +236,7 @@ async fn main() -> Result<()> {
                 SchemaRecord::ReadinessAssessment => READINESS_SCHEMA_JSON,
                 SchemaRecord::Degradation => DEGRADATION_SCHEMA_JSON,
                 SchemaRecord::CapabilityReport => CAPABILITY_REPORT_SCHEMA_JSON,
+                SchemaRecord::ProvisionedTool => PROVISIONED_TOOL_SCHEMA_JSON,
             };
             println!("{schema}");
             Ok(())
@@ -386,6 +412,102 @@ fn capability_markdown(report: &CapabilityReport) -> String {
         .expect("writing to String cannot fail");
     }
     output
+}
+
+/// Install the scanners this host is missing.
+///
+/// Only tools distributed as a checksum-verified static binary that installs
+/// without elevation are provisioned. A container runtime and a model server
+/// need elevation or large downloads, so they are reported, never installed.
+async fn setup(
+    selected: &[ScannerSelection],
+    tool_directory: &PathBuf,
+    format: OutputFormat,
+) -> Result<()> {
+    let requested: Vec<CapabilityKind> = if selected.is_empty() {
+        // Default to whatever the host is actually missing.
+        let report = CapabilityProbe::default()
+            .detect()
+            .await
+            .context("failed to probe host capability")?;
+        let gaps = report.provisionable_gaps();
+        if gaps.is_empty() {
+            println!("Every provisionable scanner is already available. Nothing to install.");
+            return Ok(());
+        }
+        gaps
+    } else {
+        let mut kinds: Vec<CapabilityKind> = selected
+            .iter()
+            .map(|choice| match choice {
+                ScannerSelection::Trivy => CapabilityKind::Trivy,
+                ScannerSelection::OsvScanner => CapabilityKind::OsvScanner,
+            })
+            .collect();
+        kinds.sort_unstable();
+        kinds.dedup();
+        kinds
+    };
+
+    let provisioner = Provisioner::new(tool_directory);
+    let mut installed = Vec::new();
+    let mut failures = Vec::new();
+    for tool in requested {
+        match provisioner.install(tool).await {
+            Ok(record) => installed.push(record),
+            Err(error) => failures.push((tool, error.to_string())),
+        }
+    }
+
+    match format {
+        OutputFormat::Json => {
+            let failures: Vec<_> = failures
+                .iter()
+                .map(|(tool, message)| json!({"tool": tool.as_str(), "error": message}))
+                .collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "installed": installed,
+                    "failed": failures,
+                    "tool_directory": provisioner.bin_directory(),
+                }))?
+            );
+        }
+        OutputFormat::Markdown => {
+            println!("# LaunchGuard setup\n");
+            for record in &installed {
+                let state = if record.newly_installed {
+                    "installed"
+                } else {
+                    "already present"
+                };
+                println!(
+                    "- `{}` {} — {state} at `{}`",
+                    record.tool.as_str(),
+                    record.version,
+                    record.installed_path
+                );
+            }
+            for (tool, message) in &failures {
+                println!("- `{}` — not installed: {message}", tool.as_str());
+            }
+            if !installed.is_empty() {
+                println!(
+                    "\nEvery download was verified against a digest compiled into this release."
+                );
+                println!(
+                    "\nPoint audits at them with `--trivy-executable` and `--osv-executable`, or set"
+                );
+                println!("`LAUNCHGUARD_TRIVY` and `LAUNCHGUARD_OSV_SCANNER`.");
+            }
+        }
+    }
+
+    if installed.is_empty() && !failures.is_empty() {
+        return Err(anyhow!("no tool could be provisioned"));
+    }
+    Ok(())
 }
 
 /// One scanner that completed, persisted, and normalized successfully.
@@ -765,6 +887,12 @@ fn default_database_path() -> Result<PathBuf> {
     let project_dirs = ProjectDirs::from("dev", "LaunchGuard", "LaunchGuard")
         .ok_or_else(|| anyhow!("could not determine the user data directory"))?;
     Ok(project_dirs.data_local_dir().join("history.sqlite3"))
+}
+
+fn default_tool_path() -> Result<PathBuf> {
+    let project_dirs = ProjectDirs::from("dev", "LaunchGuard", "LaunchGuard")
+        .ok_or_else(|| anyhow!("could not determine the user data directory"))?;
+    Ok(project_dirs.data_local_dir().join("tools"))
 }
 
 fn default_artifact_path() -> Result<PathBuf> {

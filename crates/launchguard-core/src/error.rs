@@ -125,6 +125,39 @@ pub enum LaunchGuardError {
         /// Record type that failed validation.
         record: &'static str,
     },
+
+    /// This build pins no release of a tool for the running platform.
+    #[error("{tool} cannot be provisioned for {os}/{architecture} by this release")]
+    ProvisioningUnsupported {
+        /// Tool that cannot be provisioned.
+        tool: &'static str,
+        /// Host operating system.
+        os: &'static str,
+        /// Host architecture.
+        architecture: &'static str,
+    },
+
+    /// A downloaded artifact did not match its pinned digest.
+    ///
+    /// This fails closed with nothing retained. There is no unverified fallback.
+    #[error("{tool} download failed verification: expected {expected}, got {actual}")]
+    ProvisioningDigestMismatch {
+        /// Tool being provisioned.
+        tool: &'static str,
+        /// Digest compiled into this release.
+        expected: String,
+        /// Digest actually computed over the download.
+        actual: String,
+    },
+
+    /// A verified artifact did not contain the expected executable.
+    #[error("unusable {tool} release artifact: {message}")]
+    ProvisioningArtifact {
+        /// Tool being provisioned.
+        tool: &'static str,
+        /// Contract failure without artifact contents.
+        message: String,
+    },
 }
 
 /// Result type used by the `LaunchGuard` engine.

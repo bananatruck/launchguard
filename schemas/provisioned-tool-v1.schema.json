@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/provisioned-tool-v1.schema.json",
+  "title": "LaunchGuard ProvisionedTool v1",
+  "description": "A trusted tool installed by LaunchGuard, with the evidence that verified it. Versions and digests are compiled into the release rather than resolved at runtime.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tool",
+    "version",
+    "source_url",
+    "artifact_sha256",
+    "installed_path",
+    "newly_installed"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "tool": {
+      "enum": ["trivy", "osv_scanner"]
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_url": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "installed_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "newly_installed": {
+      "type": "boolean"
+    }
+  }
+}

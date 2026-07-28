@@ -147,19 +147,27 @@ work when downloaded and inspected before execution.
 
 ## Implementation status
 
-Capability discovery is implemented: `launchguard doctor` probes Git, a
+Capability discovery is implemented. `launchguard doctor` probes Git, a
 container runtime, both scanners, and a loopback inference endpoint, and emits a
-schema-valid `CapabilityReport`. Probing succeeds on a host with an empty
-`PATH`, reporting every capability absent while still offering Track A, which is
-covered by an end-to-end test.
+schema-valid `CapabilityReport`. Probing succeeds on a host with nothing
+installed, reporting every capability absent while still offering Track A.
+
+Provisioning is implemented. `launchguard setup` installs Trivy 0.72.0 and
+OSV-Scanner 2.4.0 from digests compiled into the release, across nine
+platform artifacts. Measured end to end on a host with neither scanner: `doctor`
+reported both missing, `setup` installed and verified both, and an audit using
+them completed with 26 findings, 23 confirmed by both scanners, and no
+degradation. A second `setup` reported both already present without
+re-downloading.
 
 Remaining in this phase:
 
-- `launchguard setup` and the `ProvisionedTool` record.
 - Release binaries, checksums, and the install script.
 - Disk and memory probing for preview admission control.
 - Threading the capability report through `RunRecord` so a stored run states
   which capabilities were present when it was produced.
+- A Trivy Windows artifact, which ships as a zip this release does not unpack.
+  Windows is reported unsupported for Trivy rather than resolved another way.
 
 ## Exit criteria
 
