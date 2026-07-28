@@ -90,6 +90,11 @@ limit that is not sourced from current provider documentation.
 
 ## Phase 5: Guided deployment and pull requests
 
+**Status: publication implemented, guided flow pending.** `launchguard pr`
+plans and opens an approval-gated pull request. The `ship` wizard and the
+`summary` artifact remain, and device-flow sign-in needs a registered
+`LaunchGuard` OAuth application before it can replace a supplied token.
+
 - Add the `launchguard ship` guided flow with a non-interactive equivalent.
 - Add GitHub device-flow authentication with scoped permission previews.
 - Split publication gating into hard block, overridable soft block, and clear.

@@ -8,12 +8,14 @@ mod deploy;
 mod detect;
 mod error;
 mod finding;
+mod github;
 mod history;
 mod model;
 mod plan;
 mod provider;
 mod provision;
 mod publication;
+mod publish;
 mod readiness;
 mod scanner;
 
@@ -35,6 +37,9 @@ pub use error::{LaunchGuardError, Result};
 pub use finding::{
     Confidence, FINDING_SCHEMA_JSON, FINDING_SCHEMA_VERSION, Finding, FindingCategory,
     FindingLocation, PackageReference, ScannerKind, Severity,
+};
+pub use github::{
+    DeviceAuthorization, DeviceFlow, GitHubClient, PublishedPullRequest, RepositoryFacts,
 };
 pub use history::{HistoryEntry, HistoryStore, RunRecord};
 pub use model::{
@@ -58,6 +63,10 @@ pub use provision::{
 pub use publication::{
     GateLevel, GateReason, PUBLICATION_DECISION_SCHEMA_JSON, PUBLICATION_DECISION_SCHEMA_VERSION,
     PreviewOutcome, PublicationDecision, PublicationGate,
+};
+pub use publish::{
+    PULL_REQUEST_PLAN_SCHEMA_JSON, PULL_REQUEST_PLAN_SCHEMA_VERSION, PublicationContext,
+    PullRequestPlan, PullRequestPlanner, RequestedScope,
 };
 pub use readiness::{
     DimensionScore, READINESS_POLICY_VERSION, READINESS_SCHEMA_JSON, READINESS_SCHEMA_VERSION,

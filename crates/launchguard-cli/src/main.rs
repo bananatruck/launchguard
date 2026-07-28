@@ -12,12 +12,14 @@ use launchguard_core::{
     ArtifactStore, CAPABILITY_REPORT_SCHEMA_JSON, CapabilityKind, CapabilityProbe,
     CapabilityReport, CapabilityStatus, DEGRADATION_SCHEMA_JSON, DEPLOYMENT_INTENT_SCHEMA_JSON,
     Degradation, DeliveryTrack, DetectionEngine, DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON,
-    FINDING_SCHEMA_JSON, Finding, GENERATED_FILE_SCHEMA_JSON, HistoryEntry, HistoryStore,
-    IntentGenerator, PROJECT_PROFILE_SCHEMA_JSON, PROVISIONED_TOOL_SCHEMA_JSON, PlanGenerator,
-    ProbeConfig, ProjectProfile, Provider, Provisioner, RAW_ARTIFACT_SCHEMA_VERSION,
-    READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord,
-    ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance, ScannerRunner,
-    generate_configuration, merge_findings,
+    FINDING_SCHEMA_JSON, Finding, GENERATED_FILE_SCHEMA_JSON, GateLevel, GitHubClient,
+    HistoryEntry, HistoryStore, IntentGenerator, PROJECT_PROFILE_SCHEMA_JSON,
+    PROVISIONED_TOOL_SCHEMA_JSON, PUBLICATION_DECISION_SCHEMA_JSON, PULL_REQUEST_PLAN_SCHEMA_JSON,
+    PlanGenerator, PreviewOutcome, ProbeConfig, ProjectProfile, Provider, Provisioner,
+    PublicationContext, PublicationGate, PullRequestPlan, PullRequestPlanner,
+    RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine,
+    RepositoryAcquirer, RunRecord, ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance,
+    ScannerRunner, generate_configuration, merge_findings,
 };
 use serde_json::json;
 use tracing::warn;
@@ -120,6 +122,36 @@ enum Command {
         format: OutputFormat,
     },
 
+    /// Open a reviewed pull request adding deployment configuration.
+    Pr {
+        /// Local directory or public GitHub repository URL.
+        source: String,
+
+        /// Target repository as `owner/name`.
+        #[arg(long)]
+        repository: String,
+
+        /// Provider to deploy to.
+        #[arg(long, value_enum)]
+        provider: ProviderSelection,
+
+        /// Trusted scanner to run first. Repeat for both.
+        #[arg(long, value_enum)]
+        scanner: Vec<ScannerSelection>,
+
+        /// Accept the soft-blocked risks. Recorded in the pull request.
+        #[arg(long)]
+        allow_unverified: bool,
+
+        /// Publish the plan with this digest. Without it, nothing is pushed.
+        #[arg(long)]
+        approve: Option<String>,
+
+        /// Report representation.
+        #[arg(long, value_enum, default_value_t = OutputFormat::Markdown)]
+        format: OutputFormat,
+    },
+
     /// Generate a reviewed execution plan without running scanners or project code.
     Plan {
         /// Local directory or public GitHub repository URL.
@@ -214,6 +246,8 @@ enum SchemaRecord {
     ProvisionedTool,
     DeploymentIntent,
     GeneratedFile,
+    PublicationDecision,
+    PullRequestPlan,
 }
 
 #[tokio::main]
@@ -265,6 +299,32 @@ async fn main() -> Result<()> {
             domain,
             format,
         } => target(&source, provider.map(Provider::from), domain, format).await,
+        Command::Pr {
+            source,
+            repository,
+            provider,
+            scanner,
+            allow_unverified,
+            approve,
+            format,
+        } => {
+            let tools = default_tool_path()?;
+            pull_request(PullRequestOptions {
+                source: &source,
+                repository: &repository,
+                provider: Provider::from(provider),
+                scanners: &scanner,
+                allow_unverified,
+                approve: approve.as_deref(),
+                artifact_directory: &default_artifact_path()?,
+                scanner_config: ScannerConfig {
+                    trivy_executable: resolve_scanner(CapabilityKind::Trivy, &tools),
+                    osv_executable: resolve_scanner(CapabilityKind::OsvScanner, &tools),
+                },
+                format,
+            })
+            .await
+        }
         Command::Plan { source, format } => plan(&source, format).await,
         Command::Status { run_id, format } => {
             let store = HistoryStore::open(&database_path)?;
@@ -287,6 +347,8 @@ async fn main() -> Result<()> {
                 SchemaRecord::ProvisionedTool => PROVISIONED_TOOL_SCHEMA_JSON,
                 SchemaRecord::DeploymentIntent => DEPLOYMENT_INTENT_SCHEMA_JSON,
                 SchemaRecord::GeneratedFile => GENERATED_FILE_SCHEMA_JSON,
+                SchemaRecord::PublicationDecision => PUBLICATION_DECISION_SCHEMA_JSON,
+                SchemaRecord::PullRequestPlan => PULL_REQUEST_PLAN_SCHEMA_JSON,
             };
             println!("{schema}");
             Ok(())
@@ -710,6 +772,197 @@ async fn target(
     Ok(())
 }
 
+struct PullRequestOptions<'a> {
+    source: &'a str,
+    repository: &'a str,
+    provider: Provider,
+    scanners: &'a [ScannerSelection],
+    allow_unverified: bool,
+    approve: Option<&'a str>,
+    artifact_directory: &'a PathBuf,
+    scanner_config: ScannerConfig,
+    format: OutputFormat,
+}
+
+/// Plan a pull request, and open it only against an approved digest.
+///
+/// Without `--approve` nothing is pushed and no credential is requested: the
+/// plan is printed so a person can read exactly what publication would do.
+async fn pull_request(options: PullRequestOptions<'_>) -> Result<()> {
+    let repository = RepositoryAcquirer::new()?
+        .acquire(options.source)
+        .await
+        .with_context(|| format!("failed to acquire {}", options.source))?;
+    let profile = DetectionEngine::default()
+        .inspect(&repository)
+        .with_context(|| format!("failed to inspect {}", options.source))?;
+
+    // Same audit the `audit` command performs, so the record is identical.
+    let execution_plan = PlanGenerator.generate(&profile).ok();
+    let runner = ScannerRunner::new(options.scanner_config, ScannerLimits::default());
+    let store = ArtifactStore::new(options.artifact_directory);
+    let mut selected = options.scanners.to_vec();
+    selected.sort_unstable();
+    selected.dedup();
+    let mut findings = Vec::new();
+    let mut completed = Vec::new();
+    let mut provenance = Vec::new();
+    for choice in selected {
+        let kind = ScannerKind::from(choice);
+        match scan(&runner, &store, kind, repository.root()).await {
+            Ok(done) => {
+                findings.extend(done.findings);
+                provenance.extend(done.provenance);
+                completed.push(kind);
+            }
+            Err(degradation) => warn!(
+                scanner = kind.as_str(),
+                reason = degradation.detail.as_str(),
+                "continuing with degraded security coverage"
+            ),
+        }
+    }
+    let findings = merge_findings(findings);
+    let readiness = ReadinessEngine
+        .assess(&profile, &findings, &completed, execution_plan.as_ref())
+        .context("failed to calculate readiness")?;
+
+    let intent = IntentGenerator
+        .generate(&profile, options.provider, None)
+        .context("failed to capture deployment intent")?;
+    let files =
+        generate_configuration(&intent).context("failed to generate deployment configuration")?;
+
+    let capability = CapabilityProbe::default().detect().await.ok();
+    let mut decision = PublicationGate
+        .evaluate(
+            &readiness,
+            &findings,
+            capability.as_ref(),
+            PreviewOutcome::NotAttempted,
+        )
+        .context("failed to evaluate publication policy")?;
+
+    if options.allow_unverified && decision.level == GateLevel::SoftBlock {
+        decision = decision
+            .accept_override()
+            .context("failed to accept the publication override")?;
+    }
+    if !decision.permits_publication() {
+        for reason in &decision.reasons {
+            println!(
+                "- `{}` ({}) — {}",
+                reason.code,
+                reason.level.as_str(),
+                reason.summary
+            );
+        }
+        return Err(anyhow!(
+            "publication is {} — {}",
+            decision.level.as_str(),
+            if decision.level == GateLevel::HardBlock {
+                "this cannot be overridden"
+            } else {
+                "re-run with --allow-unverified to accept these risks"
+            }
+        ));
+    }
+
+    // GitHub tells us the base branch and whether a broader scope is needed.
+    let token = std::env::var("LAUNCHGUARD_GITHUB_TOKEN").ok();
+    let facts = match token.as_deref() {
+        Some(token) => GitHubClient::new(token)
+            .repository_facts(options.repository)
+            .await
+            .ok(),
+        None => None,
+    };
+    let plan = PullRequestPlanner
+        .plan(&PublicationContext {
+            repository: options.repository,
+            base_branch: facts
+                .as_ref()
+                .map_or("main", |facts| facts.default_branch.as_str()),
+            private_repository: facts.as_ref().is_some_and(|facts| facts.private),
+            profile: &profile,
+            intent: &intent,
+            files: &files,
+            readiness: &readiness,
+            findings: &findings,
+            provenance: &provenance,
+            decision: &decision,
+        })
+        .context("failed to plan the pull request")?;
+
+    let Some(approved) = options.approve else {
+        print_pull_request_plan(&plan, options.format)?;
+        println!(
+            "\nNothing was pushed. Re-run with `--approve {}` to open this pull request.",
+            plan.digest
+        );
+        return Ok(());
+    };
+    if approved != plan.digest {
+        return Err(anyhow!(
+            "approved digest does not match this plan\n  approved: {approved}\n  planned:  {}",
+            plan.digest
+        ));
+    }
+
+    let token = token.ok_or_else(|| {
+        anyhow!(
+            "set LAUNCHGUARD_GITHUB_TOKEN to publish. Device-flow sign-in needs a registered \
+             LaunchGuard OAuth application, which this release does not ship."
+        )
+    })?;
+    let published = GitHubClient::new(token)
+        .publish(&plan)
+        .await
+        .context("failed to open the pull request")?;
+
+    match options.format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&published)?),
+        OutputFormat::Markdown => {
+            let verb = if published.newly_created {
+                "Opened"
+            } else {
+                "Updated"
+            };
+            println!("{verb} {}", published.url);
+            println!("- Branch: `{}`", published.head_branch);
+            println!("- Commit: `{}`", published.commit_sha);
+        }
+    }
+    Ok(())
+}
+
+fn print_pull_request_plan(plan: &PullRequestPlan, format: OutputFormat) -> Result<()> {
+    match format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(plan)?),
+        OutputFormat::Markdown => {
+            println!("# Proposed pull request\n");
+            println!("- Repository: `{}`", plan.repository);
+            println!(
+                "- Branch: `{}` into `{}`",
+                plan.head_branch, plan.base_branch
+            );
+            println!("- Title: {}", plan.title);
+            println!("- Plan digest: `{}`", plan.digest);
+            println!("\n## Requested permissions\n");
+            for scope in &plan.requested_scopes {
+                println!("- `{}` — {}", scope.scope, scope.permits);
+            }
+            println!("\n## Files this would add\n");
+            for file in &plan.files {
+                println!("- `{}`", file.path);
+            }
+            println!("\n## Pull request body\n");
+            println!("---\n{}\n---", plan.body);
+        }
+    }
+    Ok(())
+}
+
 async fn plan(source: &str, format: OutputFormat) -> Result<()> {
     let repository = RepositoryAcquirer::new()?
         .acquire(source)
@@ -1063,7 +1316,17 @@ fn resolve_scanner(kind: CapabilityKind, tool_directory: &Path) -> PathBuf {
         .unwrap_or_else(fallback)
 }
 
+/// Where provisioned tools live.
+///
+/// Read here rather than bound to one subcommand, so `setup`, `doctor`, `audit`,
+/// and `pr` all agree on the location. Binding it to `setup` alone let a run
+/// install scanners in one directory and then look for them in another.
 fn default_tool_path() -> Result<PathBuf> {
+    if let Ok(configured) = std::env::var("LAUNCHGUARD_TOOL_DIRECTORY")
+        && !configured.is_empty()
+    {
+        return Ok(PathBuf::from(configured));
+    }
     let project_dirs = ProjectDirs::from("dev", "LaunchGuard", "LaunchGuard")
         .ok_or_else(|| anyhow!("could not determine the user data directory"))?;
     Ok(project_dirs.data_local_dir().join("tools"))

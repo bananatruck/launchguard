@@ -158,6 +158,20 @@ The `audit` command:
 The `plan` command generates and prints a reviewed execution plan without
 running scanners or project code.
 
+The `pr` command plans a pull request adding that configuration, and opens it
+only against an approved digest. Run it without `--approve` and nothing is
+pushed and no credential is requested: it prints the branch, the exact
+permissions it would need, the files it would add, and the full pull-request
+body. Publication is gated in three levels — a verified secret or critical
+vulnerability is refused outright, incomplete evidence needs `--allow-unverified`
+and records exactly what was skipped in the pull request, and a clean run
+publishes. The branch derives from the deployment intent digest, so re-running
+updates that pull request rather than opening another.
+
+Set `LAUNCHGUARD_GITHUB_TOKEN` to publish. Device-flow sign-in is implemented
+but needs a registered LaunchGuard OAuth application, which this release does
+not ship.
+
 The `target` command chooses where a project should go and generates its
 deployment configuration — a provider manifest, and for server projects a
 Dockerfile that runs as a non-root user. Run it without `--provider` to see the
@@ -230,6 +244,8 @@ The detailed contract is in
 - [ProvisionedTool v1 JSON Schema](schemas/provisioned-tool-v1.schema.json)
 - [DeploymentIntent v1 JSON Schema](schemas/deployment-intent-v1.schema.json)
 - [GeneratedFile v1 JSON Schema](schemas/generated-file-v1.schema.json)
+- [PublicationDecision v1 JSON Schema](schemas/publication-decision-v1.schema.json)
+- [PullRequestPlan v1 JSON Schema](schemas/pull-request-plan-v1.schema.json)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status
