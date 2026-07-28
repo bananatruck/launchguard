@@ -44,7 +44,9 @@ fetch() {
 os="$(uname -s)"
 arch="$(uname -m)"
 case "$os" in
-    Linux) os_part="unknown-linux-gnu" ;;
+    # Linux binaries are statically linked against musl, so they run on any
+    # distribution regardless of its glibc version.
+    Linux) os_part="unknown-linux-musl" ;;
     Darwin) os_part="apple-darwin" ;;
     *) fail "unsupported operating system: $os (Windows users: download the zip from the releases page)" ;;
 esac
