@@ -102,6 +102,7 @@ degrades coverage instead of failing the run.
 
 ```bash
 cargo build --locked
+cargo run --locked -- doctor
 cargo run --locked -- audit ./path/to/project --format json
 cargo run --locked -- audit ./path/to/project --scanner trivy --scanner osv-scanner
 cargo run --locked -- audit https://github.com/owner/public-repository
@@ -110,6 +111,11 @@ cargo run --locked -- history
 cargo run --locked -- status <run-id> --format markdown
 cargo run --locked -- schema execution-plan
 ```
+
+The `doctor` command probes this host and reports which delivery tracks it can
+run. It never blocks, installs, or changes anything, and it succeeds even when
+nothing is installed — a missing capability is an outcome to report, not a
+reason to refuse work.
 
 The `audit` command:
 
@@ -186,6 +192,7 @@ The detailed contract is in
 - [ExecutionPlan v1 JSON Schema](schemas/execution-plan-v1.schema.json)
 - [ReadinessAssessment v1 JSON Schema](schemas/readiness-assessment-v1.schema.json)
 - [Degradation v1 JSON Schema](schemas/degradation-v1.schema.json)
+- [CapabilityReport v1 JSON Schema](schemas/capability-report-v1.schema.json)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status

@@ -9,11 +9,13 @@ use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use directories::ProjectDirs;
 use launchguard_core::{
-    ArtifactStore, DEGRADATION_SCHEMA_JSON, Degradation, DetectionEngine, DetectionStatus,
-    EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, Finding, HistoryEntry, HistoryStore,
-    PROJECT_PROFILE_SCHEMA_JSON, PlanGenerator, ProjectProfile, RAW_ARTIFACT_SCHEMA_VERSION,
-    READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine, RepositoryAcquirer, RunRecord,
-    ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance, ScannerRunner, merge_findings,
+    ArtifactStore, CAPABILITY_REPORT_SCHEMA_JSON, CapabilityProbe, CapabilityReport,
+    CapabilityStatus, DEGRADATION_SCHEMA_JSON, Degradation, DeliveryTrack, DetectionEngine,
+    DetectionStatus, EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, Finding, HistoryEntry,
+    HistoryStore, PROJECT_PROFILE_SCHEMA_JSON, PlanGenerator, ProjectProfile,
+    RAW_ARTIFACT_SCHEMA_VERSION, READINESS_SCHEMA_JSON, RawArtifact, ReadinessEngine,
+    RepositoryAcquirer, RunRecord, ScannerConfig, ScannerKind, ScannerLimits, ScannerProvenance,
+    ScannerRunner, merge_findings,
 };
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
@@ -45,6 +47,13 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Probe this host and report which delivery tracks it can run.
+    Doctor {
+        /// Report representation.
+        #[arg(long, value_enum, default_value_t = OutputFormat::Markdown)]
+        format: OutputFormat,
+    },
+
     /// Inspect manifests and source markers without executing project code.
     Audit {
         /// Local directory or public GitHub repository URL.
@@ -148,6 +157,7 @@ enum SchemaRecord {
     ExecutionPlan,
     ReadinessAssessment,
     Degradation,
+    CapabilityReport,
 }
 
 #[tokio::main]
@@ -157,6 +167,7 @@ async fn main() -> Result<()> {
     let database_path = cli.database.map_or_else(default_database_path, Ok)?;
 
     match cli.command {
+        Command::Doctor { format } => doctor(format).await,
         Command::Audit {
             source,
             format,
@@ -199,6 +210,7 @@ async fn main() -> Result<()> {
                 SchemaRecord::ExecutionPlan => EXECUTION_PLAN_SCHEMA_JSON,
                 SchemaRecord::ReadinessAssessment => READINESS_SCHEMA_JSON,
                 SchemaRecord::Degradation => DEGRADATION_SCHEMA_JSON,
+                SchemaRecord::CapabilityReport => CAPABILITY_REPORT_SCHEMA_JSON,
             };
             println!("{schema}");
             Ok(())
@@ -287,6 +299,93 @@ async fn audit(
         Some(HistoryStore::open(database_path)?.record(&record)?.run_id)
     };
     print_report(&record, run_id, format)
+}
+
+/// Report which delivery tracks this host can run, and why.
+///
+/// Discovery never blocks, installs, or mutates the host. A missing capability
+/// is an outcome to report, not a reason to refuse work.
+async fn doctor(format: OutputFormat) -> Result<()> {
+    let report = CapabilityProbe::default()
+        .detect()
+        .await
+        .context("failed to probe host capability")?;
+    match format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        OutputFormat::Markdown => println!("{}", capability_markdown(&report)),
+    }
+    Ok(())
+}
+
+fn capability_markdown(report: &CapabilityReport) -> String {
+    let mut output = String::new();
+    writeln!(output, "# LaunchGuard host capability").expect("writing to String cannot fail");
+    writeln!(output).expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "- Platform: `{}` on `{}`",
+        report.platform.os, report.platform.architecture
+    )
+    .expect("writing to String cannot fail");
+    writeln!(output).expect("writing to String cannot fail");
+    writeln!(output, "## Capabilities").expect("writing to String cannot fail");
+    writeln!(output).expect("writing to String cannot fail");
+    for capability in &report.capabilities {
+        let mark = match capability.status {
+            CapabilityStatus::Present => "found",
+            CapabilityStatus::Absent => "missing",
+        };
+        let version = capability
+            .version
+            .as_deref()
+            .map_or_else(String::new, |value| format!(" {value}"));
+        writeln!(
+            output,
+            "- `{}` — {mark}{version} ({})",
+            capability.kind.as_str(),
+            capability.kind.purpose()
+        )
+        .expect("writing to String cannot fail");
+    }
+
+    writeln!(output).expect("writing to String cannot fail");
+    writeln!(output, "## Available tracks").expect("writing to String cannot fail");
+    writeln!(output).expect("writing to String cannot fail");
+    for track in &report.available_tracks {
+        let description = match track {
+            DeliveryTrack::Deploy => "audit, plan, generate configuration, and publish",
+            DeliveryTrack::Verify => "everything above, plus locally verified build and health",
+        };
+        writeln!(output, "- `{}` — {description}", track.as_str())
+            .expect("writing to String cannot fail");
+    }
+    if let Some(blocking) = report.blocking_capability {
+        writeln!(output).expect("writing to String cannot fail");
+        writeln!(
+            output,
+            "Local verification is unavailable because `{}` is missing. Deployment does not require it.",
+            blocking.as_str()
+        )
+        .expect("writing to String cannot fail");
+    }
+
+    let gaps = report.provisionable_gaps();
+    if !gaps.is_empty() {
+        writeln!(output).expect("writing to String cannot fail");
+        writeln!(output, "## Next step").expect("writing to String cannot fail");
+        writeln!(output).expect("writing to String cannot fail");
+        let names = gaps
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(
+            output,
+            "Run `launchguard setup` to install {names} from pinned, checksum-verified releases."
+        )
+        .expect("writing to String cannot fail");
+    }
+    output
 }
 
 /// One scanner that completed, persisted, and normalized successfully.

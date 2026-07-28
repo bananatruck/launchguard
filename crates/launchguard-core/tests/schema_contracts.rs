@@ -3,8 +3,9 @@
 use std::fs;
 
 use launchguard_core::{
-    DetectionEngine, EXECUTION_PLAN_SCHEMA_JSON, FINDING_SCHEMA_JSON, PlanGenerator,
-    READINESS_SCHEMA_JSON, ReadinessEngine, RepositoryAcquirer, ScannerKind, normalize_trivy,
+    CAPABILITY_REPORT_SCHEMA_JSON, CapabilityProbe, DetectionEngine, EXECUTION_PLAN_SCHEMA_JSON,
+    FINDING_SCHEMA_JSON, PlanGenerator, ProbeConfig, READINESS_SCHEMA_JSON, ReadinessEngine,
+    RepositoryAcquirer, ScannerKind, normalize_trivy,
 };
 
 #[tokio::test]
@@ -42,6 +43,31 @@ async fn generated_phase_two_records_validate_against_bundled_schemas() {
     validate(FINDING_SCHEMA_JSON, &findings[0]);
     validate(EXECUTION_PLAN_SCHEMA_JSON, &plan);
     validate(READINESS_SCHEMA_JSON, &assessment);
+}
+
+#[tokio::test]
+async fn capability_reports_validate_against_the_bundled_schema() {
+    // A host with nothing installed still produces a schema-valid report.
+    let empty = ProbeConfig {
+        git_executable: "/nonexistent/git".into(),
+        podman_executable: "/nonexistent/podman".into(),
+        docker_executable: "/nonexistent/docker".into(),
+        trivy_executable: "/nonexistent/trivy".into(),
+        osv_executable: "/nonexistent/osv-scanner".into(),
+        inference_endpoint: "http://127.0.0.1:1".to_owned(),
+    };
+    let report = CapabilityProbe::new(empty)
+        .detect()
+        .await
+        .expect("probe an empty host");
+    validate(CAPABILITY_REPORT_SCHEMA_JSON, &report);
+
+    // So does whatever this machine actually has.
+    let measured = CapabilityProbe::default()
+        .detect()
+        .await
+        .expect("probe this host");
+    validate(CAPABILITY_REPORT_SCHEMA_JSON, &measured);
 }
 
 fn validate<T: serde::Serialize>(schema: &str, instance: &T) {

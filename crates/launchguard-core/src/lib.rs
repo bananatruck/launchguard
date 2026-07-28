@@ -2,6 +2,7 @@
 
 mod acquire;
 mod artifact;
+mod capability;
 mod degradation;
 mod detect;
 mod error;
@@ -14,6 +15,10 @@ mod scanner;
 
 pub use acquire::{AcquiredRepository, RepositoryAcquirer};
 pub use artifact::{ArtifactStore, RAW_ARTIFACT_SCHEMA_VERSION, RawArtifact};
+pub use capability::{
+    CAPABILITY_REPORT_SCHEMA_JSON, CAPABILITY_REPORT_SCHEMA_VERSION, Capability, CapabilityKind,
+    CapabilityProbe, CapabilityReport, CapabilityStatus, DeliveryTrack, Platform, ProbeConfig,
+};
 pub use degradation::{
     DEGRADATION_SCHEMA_JSON, DEGRADATION_SCHEMA_VERSION, Degradation, DegradationKind,
 };

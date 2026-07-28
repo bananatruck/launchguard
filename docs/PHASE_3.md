@@ -145,6 +145,22 @@ The install script itself is the weakest link, because a user pipes it from the
 network. It must be short enough to read, verify checksums, pin a release, and
 work when downloaded and inspected before execution.
 
+## Implementation status
+
+Capability discovery is implemented: `launchguard doctor` probes Git, a
+container runtime, both scanners, and a loopback inference endpoint, and emits a
+schema-valid `CapabilityReport`. Probing succeeds on a host with an empty
+`PATH`, reporting every capability absent while still offering Track A, which is
+covered by an end-to-end test.
+
+Remaining in this phase:
+
+- `launchguard setup` and the `ProvisionedTool` record.
+- Release binaries, checksums, and the install script.
+- Disk and memory probing for preview admission control.
+- Threading the capability report through `RunRecord` so a stored run states
+  which capabilities were present when it was produced.
+
 ## Exit criteria
 
 - Checksummed binaries publish for all five targets, and the install script

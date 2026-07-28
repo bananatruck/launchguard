@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://launchguard.dev/schemas/capability-report-v1.schema.json",
+  "title": "LaunchGuard CapabilityReport v1",
+  "description": "Measured host capability and the delivery tracks it permits. Capability is measured, never inferred from the operating system.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "platform",
+    "capabilities",
+    "available_tracks",
+    "blocking_capability",
+    "detected_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture"],
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "available_tracks": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "enum": ["deploy", "verify"]
+      }
+    },
+    "blocking_capability": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/capabilityKind"
+        }
+      ]
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "capabilityKind": {
+      "enum": [
+        "git",
+        "container_runtime",
+        "trivy",
+        "osv_scanner",
+        "local_inference"
+      ]
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "status", "implementation", "version", "detail"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/capabilityKind"
+        },
+        "status": {
+          "enum": ["present", "absent"]
+        },
+        "implementation": {
+          "type": ["string", "null"]
+        },
+        "version": {
+          "type": ["string", "null"]
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 259
+        }
+      }
+    }
+  }
+}

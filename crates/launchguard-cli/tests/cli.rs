@@ -126,6 +126,46 @@ fn a_missing_scanner_degrades_coverage_instead_of_failing_the_audit() {
     assert_eq!(output["readiness"]["blocks_publication"], true);
 }
 
+/// `doctor` must succeed on any host, including one with nothing installed.
+/// Refusing to report is the one thing capability discovery may never do.
+#[test]
+fn doctor_reports_capability_without_blocking_or_requiring_anything() {
+    let output = Command::new(env!("CARGO_BIN_EXE_launchguard"))
+        .arg("doctor")
+        .arg("--format")
+        .arg("json")
+        .env("PATH", "/nonexistent")
+        .output()
+        .expect("run doctor");
+    assert!(
+        output.status.success(),
+        "doctor must succeed even with an empty PATH: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("parse capability JSON");
+    assert_eq!(report["schema_version"], "1.0");
+    assert!(report["platform"]["os"].is_string());
+
+    // Track A never depends on host capability, so it is always offered.
+    let tracks = report["available_tracks"]
+        .as_array()
+        .expect("available tracks");
+    assert!(tracks.iter().any(|track| track == "deploy"));
+    assert!(!tracks.iter().any(|track| track == "verify"));
+    assert_eq!(report["blocking_capability"], "container_runtime");
+
+    // Absence is reported per capability, never raised as a failure.
+    let capabilities = report["capabilities"].as_array().expect("capabilities");
+    assert_eq!(capabilities.len(), 5);
+    assert!(
+        capabilities
+            .iter()
+            .all(|capability| capability["status"] == "absent")
+    );
+}
+
 #[test]
 fn schema_command_emits_the_versioned_contract() {
     let output = Command::new(env!("CARGO_BIN_EXE_launchguard"))
@@ -199,6 +239,7 @@ fn phase_two_schema_commands_emit_expected_contracts() {
         ("execution-plan", "LaunchGuard ExecutionPlan v1"),
         ("readiness-assessment", "LaunchGuard ReadinessAssessment v1"),
         ("degradation", "LaunchGuard Degradation v1"),
+        ("capability-report", "LaunchGuard CapabilityReport v1"),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_launchguard"))
             .arg("schema")
