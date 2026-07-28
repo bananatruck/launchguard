@@ -126,20 +126,23 @@ fn a_missing_scanner_degrades_coverage_instead_of_failing_the_audit() {
     assert_eq!(output["readiness"]["blocks_publication"], true);
 }
 
-/// `doctor` must succeed on any host, including one with nothing installed.
-/// Refusing to report is the one thing capability discovery may never do.
+/// `doctor` must succeed on any host and report a self-consistent result.
+///
+/// Assertions here are invariants rather than facts about the machine, because
+/// a CI runner may legitimately have Docker or Git installed. The
+/// nothing-is-installed case is covered deterministically by the engine unit
+/// test, which injects paths that cannot resolve on any platform.
 #[test]
 fn doctor_reports_capability_without_blocking_or_requiring_anything() {
     let output = Command::new(env!("CARGO_BIN_EXE_launchguard"))
         .arg("doctor")
         .arg("--format")
         .arg("json")
-        .env("PATH", "/nonexistent")
         .output()
         .expect("run doctor");
     assert!(
         output.status.success(),
-        "doctor must succeed even with an empty PATH: {}",
+        "doctor must succeed on any host: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 
@@ -147,22 +150,33 @@ fn doctor_reports_capability_without_blocking_or_requiring_anything() {
         serde_json::from_slice(&output.stdout).expect("parse capability JSON");
     assert_eq!(report["schema_version"], "1.0");
     assert!(report["platform"]["os"].is_string());
+    assert!(report["platform"]["architecture"].is_string());
 
-    // Track A never depends on host capability, so it is always offered.
-    let tracks = report["available_tracks"]
-        .as_array()
-        .expect("available tracks");
-    assert!(tracks.iter().any(|track| track == "deploy"));
-    assert!(!tracks.iter().any(|track| track == "verify"));
-    assert_eq!(report["blocking_capability"], "container_runtime");
-
-    // Absence is reported per capability, never raised as a failure.
     let capabilities = report["capabilities"].as_array().expect("capabilities");
     assert_eq!(capabilities.len(), 5);
     assert!(
         capabilities
             .iter()
-            .all(|capability| capability["status"] == "absent")
+            .all(|capability| capability["status"] == "present" || capability["status"] == "absent")
+    );
+
+    // Track A depends on nothing beyond this binary, so it is always offered.
+    let tracks = report["available_tracks"]
+        .as_array()
+        .expect("available tracks");
+    assert!(tracks.iter().any(|track| track == "deploy"));
+
+    // Verification is offered exactly when a container runtime was found, and
+    // the report names the blocker exactly when it was not.
+    let runtime_present = capabilities.iter().any(|capability| {
+        capability["kind"] == "container_runtime" && capability["status"] == "present"
+    });
+    let verify_offered = tracks.iter().any(|track| track == "verify");
+    assert_eq!(verify_offered, runtime_present);
+    assert_eq!(
+        report["blocking_capability"].is_null(),
+        runtime_present,
+        "a blocking capability must be named exactly when verification is unavailable"
     );
 }
 
