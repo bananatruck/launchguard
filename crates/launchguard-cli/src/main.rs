@@ -830,8 +830,31 @@ async fn pull_request(options: PullRequestOptions<'_>) -> Result<()> {
     let intent = IntentGenerator
         .generate(&profile, options.provider, None)
         .context("failed to capture deployment intent")?;
-    let files =
+    let generated =
         generate_configuration(&intent).context("failed to generate deployment configuration")?;
+
+    // A file the project already maintains is left alone. A generated template
+    // is a floor for a project that has none, never an improvement on one a
+    // person wrote, and silently replacing hand-written guidance with a
+    // generic stub is a regression no reviewer asked for.
+    let mut files = Vec::new();
+    let mut preserved = Vec::new();
+    for file in generated {
+        if repository.root().join(&file.path).exists() {
+            preserved.push(file.path.clone());
+        } else {
+            files.push(file);
+        }
+    }
+    for path in &preserved {
+        warn!(path = path.as_str(), "keeping the existing file unchanged");
+    }
+    if files.is_empty() {
+        return Err(anyhow!(
+            "every generated file already exists in the repository ({}); nothing to publish",
+            preserved.join(", ")
+        ));
+    }
 
     let capability = CapabilityProbe::default().detect().await.ok();
     let mut decision = PublicationGate
