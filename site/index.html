@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="LaunchGuard is a local-first deployment intelligence platform for unfinished software repositories.">
+    <meta name="theme-color" content="#0e1214">
+    <title>LaunchGuard — Ship with evidence</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header>
+      <a class="brand" href="#top" aria-label="LaunchGuard home"><span class="shield">L</span><span>LaunchGuard</span></a>
+      <nav aria-label="Primary navigation"><a href="#workflow">Workflow</a><a href="#tracks">Tracks</a><a href="#gating">Safety</a><a href="#status">Status</a></nav>
+      <a class="repo" href="https://github.com/bananatruck/launchguard">GitHub <span>↗</span></a>
+    </header>
+
+    <main id="main">
+      <section class="hero grid" id="top">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> Local-first deployment intelligence</p>
+          <h1>Ship with proof.<br><em>Not guesswork.</em></h1>
+          <p class="lede">LaunchGuard turns a local checkout or public GitHub repository into a deterministic audit, a reviewable execution plan, and an approval-gated deployment pull request.</p>
+          <div class="actions"><a class="button primary" href="https://github.com/bananatruck/launchguard">Explore LaunchGuard <span>↗</span></a><a class="button secondary" href="#workflow">See how it works <span>↓</span></a></div>
+          <div class="principle-row"><span><i></i> deterministic evidence</span><span><i></i> local by default</span><span><i></i> explicit approvals</span></div>
+        </div>
+
+        <div class="terminal" aria-label="LaunchGuard audit preview">
+          <div class="terminal-bar"><span></span><span></span><span></span><small>launchguard — audit</small><b>READ ONLY</b></div>
+          <div class="terminal-body">
+            <p><i>$</i> launchguard audit ./project</p>
+            <p class="dim">→ acquiring repository evidence</p>
+            <p><span class="ok">✓</span> project detected <small>React / Vite</small></p>
+            <p><span class="ok">✓</span> manifests parsed <small>package.json · lockfile</small></p>
+            <p><span class="ok">✓</span> trivy complete <small>db: recorded</small></p>
+            <p><span class="ok">✓</span> osv-scanner complete <small>0 critical</small></p>
+            <p><span class="warn">◆</span> local runtime absent <small>verify track unavailable</small></p>
+            <div class="result"><span>READINESS</span><strong>84</strong><p>soft block · review required</p></div>
+          </div>
+          <div class="terminal-foot"><span>no project code executed</span><span>evidence digest: 7bf4…e219</span></div>
+        </div>
+      </section>
+
+      <section class="workflow" id="workflow">
+        <div class="section-heading"><p class="eyebrow"><span></span> Evidence before action</p><h2>Know what will happen before anything runs.</h2></div>
+        <ol class="pipeline">
+          <li><span>01</span><div><small>DETECT</small><b>Map the project</b><p>Classify frameworks, manifests, services, and build evidence without executing repository code.</p></div><i>→</i></li>
+          <li><span>02</span><div><small>SCAN</small><b>Normalize findings</b><p>Run trusted scanners and merge their output into stable, versioned security records.</p></div><i>→</i></li>
+          <li><span>03</span><div><small>PLAN</small><b>Make work reviewable</b><p>Generate a content-addressed execution plan with commands, resources, and network policy.</p></div><i>→</i></li>
+          <li><span>04</span><div><small>PUBLISH</small><b>Open an auditable PR</b><p>Require approval, generate provider configuration, and record every override and degradation.</p></div></li>
+        </ol>
+      </section>
+
+      <section class="tracks grid" id="tracks">
+        <div class="section-heading"><p class="eyebrow"><span></span> Capability-aware by design</p><h2>One path to deploy. Another to prove it locally.</h2></div>
+        <div class="track-cards">
+          <article><div class="track-label"><span>A</span><small>DEPLOY TRACK</small></div><h3>Reach a reviewable deployment with only the binary.</h3><p>Detect, scan, plan, generate configuration, and open a pull request. Missing optional tools become typed degradations—not dead ends.</p><ul><li>Repository classification</li><li>Security + readiness audit</li><li>Provider configuration</li><li>Approval-gated pull request</li></ul><footer><span>REQUIRES</span><b>LaunchGuard + Git</b></footer></article>
+          <div class="plus">+</div>
+          <article class="verify"><div class="track-label"><span>B</span><small>VERIFY TRACK</small></div><h3>Add a local proof before publication.</h3><p>When a container runtime is available, LaunchGuard can build, test, isolate, and health-check the project before its configuration leaves your machine.</p><ul><li>Restricted OCI preview</li><li>Build and test evidence</li><li>Health verification</li><li>Bounded repair loop</li></ul><footer><span>ADDS</span><b>Podman or Docker</b></footer></article>
+        </div>
+      </section>
+
+      <section class="gating" id="gating">
+        <div><p class="eyebrow"><span></span> Publication gating</p><h2>Missing evidence is not the same as confirmed danger.</h2><p>LaunchGuard separates hard blocks, explicit overrides, and clear decisions so users can understand the difference between an unsafe repository and an unverified one.</p><a href="https://github.com/bananatruck/launchguard/blob/main/docs/SECURITY_MODEL.md">Read the security model ↗</a></div>
+        <div class="gate-stack">
+          <article class="hard"><span>HARD BLOCK</span><b>Confirmed dangerous condition</b><p>Publication is refused. The block cannot be overridden.</p><i>×</i></article>
+          <article class="soft"><span>SOFT BLOCK</span><b>Incomplete or unverified evidence</b><p>Proceed only with an explicit, recorded override.</p><i>!</i></article>
+          <article class="clear"><span>CLEAR</span><b>Required checks satisfied</b><p>The reviewed publication step may continue.</p><i>✓</i></article>
+        </div>
+      </section>
+
+      <section class="artifacts">
+        <div class="artifact-console"><header><span>RUN ARTIFACTS</span><small>content-addressed · versioned</small></header><div><span><i>JSON</i><b>project-profile-v1</b><small>framework evidence</small></span><span><i>JSON</i><b>finding-v1</b><small>normalized scanners</small></span><span><i>JSON</i><b>execution-plan-v1</b><small>commands + policy</small></span><span><i>JSON</i><b>publication-decision-v1</b><small>gates + approvals</small></span></div></div>
+        <div><p class="eyebrow"><span></span> Auditable all the way down</p><h2>Every conclusion has a source.</h2><p>Profiles, findings, plans, readiness assessments, generated files, and publication decisions use explicit schemas. Digests make repeated runs comparable and reviewable.</p></div>
+      </section>
+
+      <section class="status" id="status">
+        <div class="section-heading"><p class="eyebrow"><span></span> Measured, not marketed</p><h2>Milestones are capability gates—not calendar promises.</h2></div>
+        <div class="status-grid">
+          <article class="complete"><span>PHASE 01</span><b>Read-only Rust engine</b><small>COMPLETE</small><p>40/40 supported fixtures classified; seven safety fixtures failed closed.</p></article>
+          <article class="complete"><span>PHASE 02</span><b>Security normalization + planning</b><small>COMPLETE</small><p>40/40 schema-valid plans with reproducible digests in the measured corpus.</p></article>
+          <article><span>PHASE 03</span><b>Distribution + capability discovery</b><small>NEXT</small><p>Prebuilt binaries, doctor checks, and verified scanner provisioning.</p></article>
+          <article><span>PHASE 04–05</span><b>Configuration + publication</b><small>VALIDATION</small><p>Implemented capabilities are being validated on real projects and guided flows.</p></article>
+        </div>
+        <p class="disclaimer">Evaluation numbers describe the repository’s documented test corpus, not a claim that LaunchGuard proves software secure or production-ready.</p>
+      </section>
+
+      <section class="free grid"><div><p class="eyebrow"><span></span> Local and free by default</p><h2>No LaunchGuard account. No hosted backend. No mandatory model bill.</h2></div><p>The core workflow is designed to run on your machine with user-supplied tools and provider accounts. Costs outside the software—hardware, domains, signing, and provider usage beyond free tiers—remain visible rather than hidden behind “free forever” language.</p></section>
+
+      <section class="cta"><p class="eyebrow"><span></span> Open source · MIT</p><h2>Turn “it should deploy” into evidence you can review.</h2><a class="button light" href="https://github.com/bananatruck/launchguard">View LaunchGuard on GitHub <span>↗</span></a></section>
+    </main>
+    <footer class="site-footer"><a class="brand" href="#top"><span class="shield">L</span><span>LaunchGuard</span></a><p>Deployment intelligence for unfinished software.</p><a href="https://github.com/bananatruck/launchguard">Source ↗</a></footer>
+  </body>
+</html>
