@@ -4,13 +4,19 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   markdown:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: DavidAnson/markdownlint-cli2-action@v24.1.0
@@ -22,6 +28,7 @@ jobs:
 
   links:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: lycheeverse/lychee-action@v2.9.0
@@ -32,5 +39,5 @@ jobs:
             --no-progress
             README.md
             CONTRIBUTING.md
-            docs/**/*.md
+            'docs/**/*.md'
           fail: true
